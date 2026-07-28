@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { liteforge } from "../wagmi";
-import { shortAddress } from "../lib/estate";
+import { explainError, shortAddress } from "../lib/estate";
 
 /// A labelled input with an always-visible explanation. Descriptions are shown
 /// rather than hidden behind tooltips: most people setting this up have never
@@ -106,23 +106,48 @@ export function ConnectBar({ compact = false }: { compact?: boolean }) {
   const injected = connectors[0];
   const wrongChain = isConnected && chainId !== liteforge.id;
 
+  // The connector object always exists, so its presence proves nothing. What
+  // matters is whether a wallet actually injected a provider — on a mobile
+  // browser none will have, because no wallet ships an extension for it.
+  const hasProvider =
+    typeof window !== "undefined" &&
+    Boolean((window as { ethereum?: unknown }).ethereum);
+
   if (!isConnected) {
     return (
       <div>
         <button
           onClick={() => injected && connect({ connector: injected })}
-          disabled={isPending || !injected}
+          disabled={isPending || !injected || !hasProvider}
         >
           {isPending ? "Connecting…" : compact ? "Connect" : "Connect wallet"}
         </button>
-        {!injected && (
-          <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-            No browser wallet detected.
+
+        {!hasProvider && !compact && (
+          <div className="notice warn" style={{ marginTop: 10 }}>
+            <strong>No wallet found in this browser.</strong>
+            <p style={{ margin: "6px 0 0", fontSize: 13.5, lineHeight: 1.55 }}>
+              This page connects to a wallet installed in the browser itself.
+              Mobile browsers cannot do that — no wallet publishes an extension
+              for them.
+            </p>
+            <p style={{ margin: "8px 0 0", fontSize: 13.5, lineHeight: 1.55 }}>
+              On a phone, open this page inside your wallet app's own browser
+              (MetaMask → menu → Browser). On a computer, install the MetaMask,
+              Rabby or Brave wallet extension.
+            </p>
           </div>
         )}
-        {error && (
+
+        {!hasProvider && compact && (
+          <div className="muted" style={{ fontSize: 12, marginTop: 6, maxWidth: 200 }}>
+            No wallet in this browser
+          </div>
+        )}
+
+        {error && hasProvider && (
           <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-            {error.message}
+            {explainError(error)}
           </div>
         )}
       </div>
