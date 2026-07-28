@@ -32,7 +32,10 @@ export const config = createConfig({
   chains: [liteforge],
   connectors: [injected()],
   transports: {
-    [liteforge.id]: http(),
+    // The default 10s timeout is too short for this RPC: a log scan over a
+    // wide block range routinely takes longer, and every request would die
+    // before the node answered.
+    [liteforge.id]: http(undefined, { timeout: 30_000, retryCount: 2 }),
   },
 });
 

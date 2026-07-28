@@ -10,10 +10,17 @@ export type Found = {
   roles: Role[];
 };
 
-/// The RPC times out on a genesis-to-latest scan, so requests are chunked.
-/// 100k blocks was verified to work against LiteForge; smaller is safer if the
-/// node is under load.
-const CHUNK = 100_000n;
+/// Requests are chunked because the RPC cannot answer a wide range quickly.
+/// Measured against LiteForge, unfiltered by contract address:
+///
+///     2k blocks  ~0.7s
+///    10k blocks  ~1.6s
+///    25k blocks  ~2.7s
+///   100k blocks  ~15s   <- exceeds viem's default 10s timeout
+///
+/// 25k keeps every request well inside the timeout and gives enough chunks
+/// for the progress indicator to actually move.
+const CHUNK = 25_000n;
 
 const ESTATE_CREATED = parseAbiItem(
   "event EstateCreated(address indexed owner, address indexed estate, address indexed vault)"
@@ -74,36 +81,43 @@ export function useDiscovery(viewer?: `0x${string}`) {
         ranges.push([from, to]);
       }
 
+      // Show movement immediately rather than sitting on 0% while the first
+      // request is in flight.
+      setProgress(1);
+
       for (const [i, [fromBlock, toBlock]] of ranges.entries()) {
-        // Estates this wallet created — restricted to known factory addresses.
-        const created = await client.getLogs({
-          address: KNOWN_FACTORIES.map((f) => f.address),
-          event: ESTATE_CREATED,
-          args: { owner: viewer },
-          fromBlock,
-          toBlock,
-        });
+        // The three queries are independent, so run them together — the chunk
+        // costs as long as its slowest request rather than the sum of all three.
+        const [created, asBeneficiary, asApprover] = await Promise.all([
+          // Estates this wallet created — restricted to known factory addresses.
+          client.getLogs({
+            address: KNOWN_FACTORIES.map((f) => f.address),
+            event: ESTATE_CREATED,
+            args: { owner: viewer },
+            fromBlock,
+            toBlock,
+          }),
+          // Estates naming this wallet — no address filter, so these match any
+          // estate ever created, including ones from factories we do not know.
+          client.getLogs({
+            event: BENEFICIARY_ADDED,
+            args: { wallet: viewer },
+            fromBlock,
+            toBlock,
+          }),
+          client.getLogs({
+            event: APPROVER_ADDED,
+            args: { wallet: viewer },
+            fromBlock,
+            toBlock,
+          }),
+        ]);
+
         created.forEach((l) => l.args.estate && add(l.args.estate, "owner"));
-
-        // Estates naming this wallet — no address filter, so this matches any
-        // estate ever created, including ones from factories we do not know.
-        const asBeneficiary = await client.getLogs({
-          event: BENEFICIARY_ADDED,
-          args: { wallet: viewer },
-          fromBlock,
-          toBlock,
-        });
         asBeneficiary.forEach((l) => add(l.address, "beneficiary"));
-
-        const asApprover = await client.getLogs({
-          event: APPROVER_ADDED,
-          args: { wallet: viewer },
-          fromBlock,
-          toBlock,
-        });
         asApprover.forEach((l) => add(l.address, "approver"));
 
-        setProgress(Math.round(((i + 1) / ranges.length) * 100));
+        setProgress(Math.max(1, Math.round(((i + 1) / ranges.length) * 100)));
       }
 
       const result: Found[] = [...roles.entries()].map(([estate, set]) => ({
