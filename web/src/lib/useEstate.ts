@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useReadContract, useReadContracts, useBalance } from "wagmi";
 import { EstateAbi } from "../abis/Estate";
 import { EstateVaultAbi } from "../abis/EstateVault";
@@ -44,7 +44,7 @@ export function useEstate(estate?: `0x${string}`, viewer?: `0x${string}`) {
           { address: estate!, abi: EstateAbi, functionName: "approvalPolicy" },
         ]
       : [],
-    query: { enabled, refetchInterval: 12_000 },
+    query: { enabled, refetchInterval: 5_000 },
   });
 
   const info = core.data?.[0]?.result as EstateInfo | undefined;
@@ -68,7 +68,7 @@ export function useEstate(estate?: `0x${string}`, viewer?: `0x${string}`) {
       functionName: "getApprover" as const,
       args: [id] as const,
     })),
-    query: { enabled: enabled && approverIds.length > 0, refetchInterval: 12_000 },
+    query: { enabled: enabled && approverIds.length > 0, refetchInterval: 5_000 },
   });
 
   const approvers = (approverReads.data ?? [])
@@ -77,7 +77,7 @@ export function useEstate(estate?: `0x${string}`, viewer?: `0x${string}`) {
 
   const vaultBalance = useBalance({
     address: vault,
-    query: { enabled: Boolean(vault), refetchInterval: 12_000 },
+    query: { enabled: Boolean(vault), refetchInterval: 5_000 },
   });
 
   // Kept as separate reads rather than one multicall: wagmi's multicall types
@@ -87,14 +87,14 @@ export function useEstate(estate?: `0x${string}`, viewer?: `0x${string}`) {
     address: vault,
     abi: EstateVaultAbi,
     functionName: "distributed",
-    query: { enabled: Boolean(vault), refetchInterval: 12_000 },
+    query: { enabled: Boolean(vault), refetchInterval: 5_000 },
   });
 
   const totalClaimableRead = useReadContract({
     address: vault,
     abi: EstateVaultAbi,
     functionName: "totalClaimable",
-    query: { enabled: Boolean(vault), refetchInterval: 12_000 },
+    query: { enabled: Boolean(vault), refetchInterval: 5_000 },
   });
 
   const myClaimableRead = useReadContract({
@@ -102,21 +102,25 @@ export function useEstate(estate?: `0x${string}`, viewer?: `0x${string}`) {
     abi: EstateVaultAbi,
     functionName: "claimable",
     args: viewer ? [viewer] : undefined,
-    query: { enabled: Boolean(vault && viewer), refetchInterval: 12_000 },
+    query: { enabled: Boolean(vault && viewer), refetchInterval: 5_000 },
   });
 
   const distributed = distributedRead.data;
   const totalClaimable = totalClaimableRead.data;
   const myClaimable = myClaimableRead.data;
 
-  const refetch = () => {
+  // Stable identity: callers capture this inside transaction callbacks, and a
+  // fresh function each render risks an old copy being the one invoked.
+  const refetch = useCallback(() => {
     core.refetch();
     approverReads.refetch();
     vaultBalance.refetch();
     distributedRead.refetch();
     totalClaimableRead.refetch();
     myClaimableRead.refetch();
-  };
+    // The individual refetch functions are stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     isLoading: core.isLoading,
