@@ -26,3 +26,10 @@ node_modules/
 web/node_modules/
 web/dist/
 *.tsbuildinfo
+
+# Editor config: settings.json is shared deliberately — its exclusions stop
+# node_modules and Foundry's lib/ from swamping the file tree and watcher for
+# anyone who clones this. Everything else under .vscode/ is personal and can
+# carry absolute local paths (launch.json, sftp.json), so it stays out.
+.vscode/*
+!.vscode/settings.json
