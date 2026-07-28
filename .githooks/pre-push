@@ -1,0 +1,37 @@
+#!/bin/sh
+# Runs the same checks as CI, before anything leaves the machine.
+# Total ~7s. Skip with: git push --no-verify
+set -e
+
+cd "$(git rev-parse --show-toplevel)"
+printf '\033[1mpre-push\033[0m running CI checks...\n'
+
+fail() { printf '\033[31m  FAIL\033[0m %s\n' "$1"; exit 1; }
+pass() { printf '\033[32m  ok\033[0m   %s\n' "$1"; }
+
+forge fmt --check >/dev/null 2>&1 || fail "forge fmt --check  (run: forge fmt)"
+pass "format"
+
+forge build --sizes >/dev/null 2>&1 || fail "forge build --sizes  (contract over 24KB?)"
+pass "contract sizes"
+
+forge test >/dev/null 2>&1 || fail "forge test  (run: forge test -vv)"
+pass "contract tests"
+
+# Stale ABIs are invisible until the UI calls a function that no longer exists.
+node web/scripts/generate-abis.mjs >/dev/null 2>&1 || fail "ABI generation"
+if ! git diff --quiet -- web/src/abis/; then
+  fail "ABIs are stale — regenerated them, review and commit web/src/abis/"
+fi
+pass "ABIs current"
+
+if [ -d web/node_modules ]; then
+  (cd web && npx tsc -b >/dev/null 2>&1) || fail "tsc  (run: cd web && npx tsc -b)"
+  pass "typecheck"
+  (cd web && npm run build >/dev/null 2>&1) || fail "vite build  (run: cd web && npm run build)"
+  pass "web build"
+else
+  printf '\033[33m  skip\033[0m web (node_modules missing)\n'
+fi
+
+printf '\033[32mall checks passed\033[0m\n'
