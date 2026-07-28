@@ -32,7 +32,11 @@ export const config = createConfig({
   chains: [liteforge],
   connectors: [injected()],
   transports: {
-    [liteforge.id]: http(),
+    // viem defaults to a 10s request timeout, which this RPC can exceed when
+    // it is busy — measured at ~15s for a heavy query. A spurious timeout on a
+    // read makes the app look broken when the chain is merely slow, so allow
+    // more headroom.
+    [liteforge.id]: http(undefined, { timeout: 30_000 }),
   },
 });
 
