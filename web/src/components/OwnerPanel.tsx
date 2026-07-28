@@ -153,6 +153,7 @@ function BeneficiariesCard({
   const [editPercent, setEditPercent] = useState("");
   const [reviewEdit, setReviewEdit] = useState(false);
   const [reviewResiduary, setReviewResiduary] = useState(false);
+  const [reviewClearResiduary, setReviewClearResiduary] = useState(false);
   const [removing, setRemoving] = useState<Beneficiary | null>(null);
 
   const tx = useTx(() => {
@@ -168,6 +169,7 @@ function BeneficiariesCard({
   const residuaryTx = useTx(() => {
     setResiduary("");
     setReviewResiduary(false);
+    setReviewClearResiduary(false);
     refetch();
   });
 
@@ -212,6 +214,13 @@ function BeneficiariesCard({
     setEditingId(null);
     setEditPercent("");
   };
+
+  // Removing the residuary is refused while the vault holds funds and shares
+  // total under 100%, because the remainder would then have no destination.
+  const clearBlockedReason: string | null =
+    funded && Number(info.totalAllocatedBps) < BPS_TOTAL
+      ? `Shares total ${bpsToPercent(info.totalAllocatedBps)}, so ${bpsToPercent(BPS_TOTAL - Number(info.totalAllocatedBps))} would have nowhere to go. Allocate the full 100% first, or withdraw the vault's funds.`
+      : null;
 
   const clearingResiduaryBlocked =
     isAddress(residuary) &&
@@ -339,11 +348,40 @@ function BeneficiariesCard({
         </table>
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
-          Residuary beneficiary — receives anything left unallocated:{" "}
-          <AddressLink address={info.residuaryBeneficiary} />
+      <div style={{ marginTop: 14, marginBottom: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+            fontSize: 13,
+          }}
+        >
+          <span className="muted">
+            Residuary beneficiary — receives anything left unallocated:{" "}
+            <AddressLink address={info.residuaryBeneficiary} />
+          </span>
+          {editable && hasResiduary && (
+            <button
+              className="secondary"
+              onClick={() => setReviewClearResiduary(true)}
+              disabled={
+                Boolean(clearBlockedReason) ||
+                residuaryTx.isPending ||
+                residuaryTx.isConfirming
+              }
+              title={clearBlockedReason ?? undefined}
+            >
+              Remove
+            </button>
+          )}
         </div>
+        {editable && hasResiduary && clearBlockedReason && (
+          <p className="help" style={{ color: "var(--urgent)", marginTop: 6 }}>
+            {clearBlockedReason}
+          </p>
+        )}
       </div>
 
       {editing && editError && <Notice tone="error">{editError}</Notice>}
@@ -558,6 +596,34 @@ function BeneficiariesCard({
           })
         }
         onCancel={() => setReviewEdit(false)}
+      />
+
+      <Confirm
+        open={reviewClearResiduary}
+        danger
+        title="Remove the residuary beneficiary?"
+        intro="Nobody will be nominated to receive unallocated funds. You can name someone again at any time while the estate is active."
+        rows={[
+          { k: "Currently", v: <Mono>{info.residuaryBeneficiary}</Mono> },
+          { k: "Shares allocated", v: bpsToPercent(info.totalAllocatedBps) },
+          {
+            k: "After removal",
+            v:
+              Number(info.totalAllocatedBps) === BPS_TOTAL
+                ? "Fully allocated — nothing left over"
+                : `${bpsToPercent(BPS_TOTAL - Number(info.totalAllocatedBps))} would be unallocated`,
+          },
+        ]}
+        confirmLabel="Remove residuary"
+        onConfirm={() =>
+          residuaryTx.send({
+            address: estate,
+            abi: EstateAbi,
+            functionName: "setResiduaryBeneficiary",
+            args: ["0x0000000000000000000000000000000000000000"],
+          })
+        }
+        onCancel={() => setReviewClearResiduary(false)}
       />
 
       <Confirm
