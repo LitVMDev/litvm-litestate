@@ -249,7 +249,7 @@ function AppView() {
       {tab === "manage" && !nothingToShow && (
         <>
           <Panel>
-            <div className="row" style={{ alignItems: "flex-end" }}>
+            <div className="row">
               {myEstates.length > 0 && (
                 <Field
                   label="Estate"

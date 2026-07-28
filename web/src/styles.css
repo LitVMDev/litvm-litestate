@@ -143,7 +143,10 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 
 label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
 .field { margin-bottom: 14px; }
-.row { display: flex; gap: 12px; flex-wrap: wrap; }
+/* Top-aligned by default. Fields in a row rarely have equal height — help
+   text, range hints and error messages all vary — and any other alignment
+   leaves the shorter field floating away from its neighbour's label. */
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
 .row > * { flex: 1 1 180px; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
 
