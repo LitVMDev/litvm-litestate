@@ -14,7 +14,6 @@ import { CheckIn } from "./components/CheckIn";
 import { Landing } from "./pages/Landing";
 import { HowItWorks } from "./pages/HowItWorks";
 import { useEstate } from "./lib/useEstate";
-import { useDiscovery, type Role } from "./lib/useDiscovery";
 import { resolveToEstate } from "./lib/resolve";
 import { href, useRoute } from "./lib/useRoute";
 import { shortAddress } from "./lib/estate";
@@ -97,14 +96,6 @@ function AppView() {
   }, [selected]);
 
   const est = useEstate(selected, address);
-  const discovery = useDiscovery(address);
-
-  // Estates found by log scan that the factory registry does not know about —
-  // older factory versions, or estates where this wallet is a beneficiary or
-  // approver rather than the owner.
-  const extraFound = discovery.found.filter(
-    (f) => !myEstates.some((m) => m.toLowerCase() === f.estate.toLowerCase())
-  );
 
   const isOwner =
     Boolean(address && est.owner) && address!.toLowerCase() === est.owner!.toLowerCase();
@@ -247,22 +238,12 @@ function AppView() {
             </div>
 
             <p className="help" style={{ marginTop: 18 }}>
-              Do not have the address? Use <strong>Search the network</strong>{" "}
-              above — it finds any estate that names this wallet.
+              Do not have the address? There is no way to search for it — ask
+              whoever set the estate up. Nothing on-chain links you to an estate
+              until it is distributed.
             </p>
           </div>
         </Panel>
-      )}
-
-      {tab === "manage" && (
-        <FindEstates
-          discovery={discovery}
-          extra={extraFound}
-          onOpen={(a) => {
-            setSelected(a);
-            setTab("manage");
-          }}
-        />
       )}
 
       {tab === "manage" && !nothingToShow && (
@@ -389,85 +370,5 @@ function AppView() {
         </>
       )}
     </>
-  );
-}
-
-/// Log-scan discovery. Kept behind an explicit button rather than run on load:
-/// it makes several RPC round-trips, and most users arriving with an estate in
-/// the factory registry never need it.
-function FindEstates({
-  discovery,
-  extra,
-  onOpen,
-}: {
-  discovery: ReturnType<typeof useDiscovery>;
-  extra: { estate: `0x${string}`; roles: Role[] }[];
-  onOpen: (a: `0x${string}`) => void;
-}) {
-  const ROLE_LABEL: Record<Role, string> = {
-    owner: "You own it",
-    beneficiary: "You are a beneficiary",
-    approver: "You are an approver",
-  };
-
-  return (
-    <Panel
-      title="Search the network"
-      hint="Finds every estate that names this wallet — including ones created by older versions, and estates where you are a beneficiary or approver rather than the owner."
-    >
-      {discovery.error && <Notice tone="error">{discovery.error}</Notice>}
-
-      {extra.length > 0 && (
-        <div className="table-scroll" style={{ marginBottom: 14 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Estate</th>
-                <th>Your role</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {extra.map((f) => (
-                <tr key={f.estate}>
-                  <td>
-                    <span className="mono">{shortAddress(f.estate)}</span>
-                  </td>
-                  <td>
-                    {f.roles.map((r) => (
-                      <span key={r} className="badge ok" style={{ marginRight: 6 }}>
-                        {ROLE_LABEL[r]}
-                      </span>
-                    ))}
-                  </td>
-                  <td className="num">
-                    <button className="secondary" onClick={() => onOpen(f.estate)}>
-                      Open
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {discovery.hasScanned && extra.length === 0 && !discovery.isScanning && (
-        <Notice>
-          No other estates found for this wallet. If you were expecting one, ask
-          whoever set it up for the estate address and open it directly.
-        </Notice>
-      )}
-
-      <div className="actions">
-        <button onClick={discovery.scan} disabled={discovery.isScanning}>
-          {discovery.isScanning
-            ? `Searching… ${discovery.progress}%`
-            : discovery.hasScanned
-              ? "Search again"
-              : "Search the network"}
-        </button>
-      </div>
-    </Panel>
   );
 }

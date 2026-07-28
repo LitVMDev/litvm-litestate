@@ -227,6 +227,12 @@ export function HowItWorks() {
       </p>
 
       <h3 id="claiming">Claiming</h3>
+      <div className="warn-box">
+        <strong>A beneficiary needs the estate address to claim.</strong>
+        Either the estate or its vault address works — the app resolves both.
+        But it cannot be looked up or searched for, so the owner must hand it
+        over while they still can.
+      </div>
       <p>
         After distribution, each beneficiary's share is set aside for them
         individually. They claim it themselves with their own wallet; nothing is
@@ -291,9 +297,12 @@ export function HowItWorks() {
           check in forever, or withdraw everything.
         </li>
         <li>
-          <strong>Beneficiaries must know the estate exists.</strong> Nothing
-          notifies anyone. Tell your beneficiaries the estate's address, or
-          leave it somewhere they will find it.
+          <strong>Beneficiaries must be given the estate address, and keep it.</strong>{" "}
+          Nothing notifies anyone, nothing links them to the estate on-chain
+          until it is distributed, and there is no way to search for it. If
+          nobody has the address when you are gone, the funds stay where they
+          are indefinitely. Store it alongside your will, with a solicitor, or
+          anywhere your family will still look years from now.
         </li>
         <li>
           <strong>Nothing here is legal advice.</strong> This is a contract on a
