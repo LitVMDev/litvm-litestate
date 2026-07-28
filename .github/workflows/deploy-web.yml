@@ -1,0 +1,72 @@
+name: Deploy web
+
+# Builds web/ and publishes it to GitHub Pages on every push to main that
+# touches the front end. Updating the live site is therefore just a git push.
+#
+# One-time setup in the repo: Settings -> Pages -> Source: "GitHub Actions",
+# and Settings -> Secrets and variables -> Actions -> Variables -> New variable
+#   VITE_FACTORY_ADDRESS = 0x...   (the deployed EstateFactory)
+#
+# It is a *variable*, not a secret: the factory address is public on-chain and
+# is baked into the built JavaScript anyway. Marking it secret would only make
+# it harder to see what a given build points at.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch: # lets you redeploy by hand, e.g. after changing the variable
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; always ship the newest commit.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: web
+
+      - name: Type-check and build
+        run: npm run build
+        working-directory: web
+        env:
+          # If unset, the app still builds and renders — it shows a clear
+          # "no factory configured" notice rather than failing the deploy.
+          VITE_FACTORY_ADDRESS: ${{ vars.VITE_FACTORY_ADDRESS }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

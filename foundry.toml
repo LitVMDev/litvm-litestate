@@ -1,0 +1,24 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+
+# Required: without the optimizer, EstateFactory exceeds the EIP-170 24KB
+# runtime limit (it embeds both Estate and EstateVault bytecode) and cannot be
+# deployed. CI runs `forge build --sizes` to catch regressions - the limit is
+# deliberately not enforced inside tests, where test contracts legitimately
+# exceed it.
+optimizer = true
+optimizer_runs = 200
+
+# Pinned, NOT auto-detected. Forge otherwise picks the newest spec it knows
+# (currently "osaka"), which can emit opcodes a target chain does not
+# implement. LitVM/LiteForge is a Polygon CDK rollup reported to target
+# Shanghai, so pin to that: it still gives us PUSH0 while keeping Cancun+
+# opcodes (MCOPY, TLOAD/TSTORE) out of the bytecode.
+evm_version = "shanghai"
+
+[rpc_endpoints]
+litvm_testnet = "https://liteforge.rpc.caldera.xyz/http"
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

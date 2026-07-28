@@ -1,0 +1,49 @@
+{
+  // Git already ignores all of these — this is purely to stop the editor's
+  // file tree, search results and file watcher from drowning in dependency
+  // and build output. Foundry's lib/ and out/ are as noisy as node_modules.
+
+  "files.exclude": {
+    "**/node_modules": true,
+    "web/dist": true,
+    "out": true,
+    "cache": true,
+    "broadcast": true
+  },
+
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/package-lock.json": true,
+    "web/dist": true,
+    "out": true,
+    "cache": true,
+    "broadcast": true,
+    "lib": true
+  },
+
+  // Watching these is what actually makes the editor sluggish — macOS has a
+  // per-process file descriptor limit that large dependency trees exhaust.
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/lib/**": true,
+    "**/out/**": true,
+    "**/cache/**": true,
+    "**/web/dist/**": true
+  },
+
+  // lib/ stays visible in the tree (submodules are worth seeing) but is
+  // excluded from search above, where forge-std and OpenZeppelin hits bury
+  // your own results.
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // lib/forge-std and lib/openzeppelin-contracts are git submodules, so VS Code
+  // lists each as its own repository in Source Control. They are pinned
+  // dependencies that are never edited here, and their presence buries this
+  // project's own changes.
+  "git.detectSubmodules": false,
+  "git.ignoredRepositories": ["lib/forge-std", "lib/openzeppelin-contracts"],
+
+  // Foundry submodules are read-only dependencies; don't offer to sync them.
+  "git.autofetch": false
+}

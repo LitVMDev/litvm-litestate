@@ -1,0 +1,28 @@
+# Compiler files
+cache/
+out/
+
+# Commonly ignored directories
+.logs/
+.ignore/
+
+# Broadcast logs record the deploying wallet address in every run file.
+# Excluded entirely: publishing them ties this repository to an on-chain
+# identity. They are local convenience records and can be regenerated.
+/broadcast/
+
+# Docs
+docs/
+
+# Dotenv file
+.env
+.env.*
+!.env.example
+
+# Front-end dependencies and build output.
+# Also declared in web/.gitignore — repeated here because some tools only read
+# the repository-root ignore file.
+node_modules/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
