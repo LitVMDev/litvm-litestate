@@ -1,6 +1,6 @@
 import { defineChain } from "viem";
 import { createConfig, http } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { injected, walletConnect } from "wagmi/connectors";
 
 /// LitVM's LiteForge testnet. Native currency is zkLTC - a 1:1 representation
 /// of LTC locked on the Litecoin mainchain - so every `value` in this app is
@@ -21,16 +21,38 @@ export const liteforge = defineChain({
   testnet: true,
 });
 
-/// Injected connector only - no WalletConnect, so there is no projectId, no
-/// relay server and no third-party service in the critical path. A beneficiary
-/// with MetaMask/Rabby and a copy of this static build can always claim, even
-/// if every service around this project has disappeared.
+const WC_PROJECT_ID = import.meta.env.VITE_WC_PROJECT_ID as string | undefined;
+
+/// `injected` is deliberately first: a browser wallet talks to this page
+/// directly, with no third party anywhere in the path. That is what lets a
+/// beneficiary claim from a copy of this static build even if every service
+/// around the project has gone.
 ///
-/// Adding WalletConnect later for mobile support is a small change, but it
-/// introduces a hosted relay dependency - a deliberate trade-off, not a default.
+/// `walletConnect` exists only because mobile browsers cannot inject a
+/// provider - no wallet ships an extension for them - so without it a phone
+/// simply cannot connect. It routes the *connection handshake* through a
+/// hosted relay; reads and signing still go direct. Desktop users never touch
+/// it. Omitting the project ID drops the connector entirely rather than
+/// shipping a broken button.
 export const config = createConfig({
   chains: [liteforge],
-  connectors: [injected()],
+  connectors: [
+    injected(),
+    ...(WC_PROJECT_ID
+      ? [
+          walletConnect({
+            projectId: WC_PROJECT_ID,
+            showQrModal: true,
+            metadata: {
+              name: "LitEstate",
+              description: "On-chain estate planning for LitVM",
+              url: typeof window !== "undefined" ? window.location.origin : "",
+              icons: [],
+            },
+          }),
+        ]
+      : []),
+  ],
   transports: {
     // viem defaults to a 10s request timeout, which this RPC can exceed when
     // it is busy — measured at ~15s for a heavy query. A spurious timeout on a

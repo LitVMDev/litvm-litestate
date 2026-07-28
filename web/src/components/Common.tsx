@@ -103,8 +103,10 @@ export function ConnectBar({ compact = false }: { compact?: boolean }) {
   const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
 
-  const injected = connectors[0];
   const wrongChain = isConnected && chainId !== liteforge.id;
+
+  const injected = connectors.find((c) => c.type === "injected");
+  const walletConnect = connectors.find((c) => c.id === "walletConnect");
 
   // The connector object always exists, so its presence proves nothing. What
   // matters is whether a wallet actually injected a provider — on a mobile
@@ -116,22 +118,28 @@ export function ConnectBar({ compact = false }: { compact?: boolean }) {
   if (!isConnected) {
     return (
       <div>
-        <button
-          onClick={() => injected && connect({ connector: injected })}
-          disabled={isPending || !injected || !hasProvider}
-        >
-          {isPending ? "Connecting…" : compact ? "Connect" : "Connect wallet"}
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {hasProvider && injected && (
+            <button onClick={() => connect({ connector: injected })} disabled={isPending}>
+              {isPending ? "Connecting…" : compact ? "Connect" : "Connect wallet"}
+            </button>
+          )}
 
-        {!hasProvider && !compact && (
+          {walletConnect && (
+            <button
+              className={hasProvider ? "secondary" : undefined}
+              onClick={() => connect({ connector: walletConnect })}
+              disabled={isPending}
+            >
+              {compact ? "Mobile" : "Use a mobile wallet"}
+            </button>
+          )}
+        </div>
+
+        {!hasProvider && !walletConnect && !compact && (
           <div className="notice warn" style={{ marginTop: 10 }}>
             <strong>No wallet found in this browser.</strong>
             <p style={{ margin: "6px 0 0", fontSize: 13.5, lineHeight: 1.55 }}>
-              This page connects to a wallet installed in the browser itself.
-              Mobile browsers cannot do that — no wallet publishes an extension
-              for them.
-            </p>
-            <p style={{ margin: "8px 0 0", fontSize: 13.5, lineHeight: 1.55 }}>
               On a phone, open this page inside your wallet app's own browser
               (MetaMask → menu → Browser). On a computer, install the MetaMask,
               Rabby or Brave wallet extension.
@@ -139,13 +147,14 @@ export function ConnectBar({ compact = false }: { compact?: boolean }) {
           </div>
         )}
 
-        {!hasProvider && compact && (
-          <div className="muted" style={{ fontSize: 12, marginTop: 6, maxWidth: 200 }}>
-            No wallet in this browser
-          </div>
+        {!hasProvider && walletConnect && !compact && (
+          <p className="help" style={{ marginTop: 8 }}>
+            No wallet extension in this browser — use <strong>Use a mobile
+            wallet</strong> to connect your wallet app.
+          </p>
         )}
 
-        {error && hasProvider && (
+        {error && (
           <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
             {explainError(error)}
           </div>

@@ -6,6 +6,7 @@ name: Deploy web
 # One-time setup in the repo: Settings -> Pages -> Source: "GitHub Actions",
 # and Settings -> Secrets and variables -> Actions -> Variables -> New variable
 #   VITE_FACTORY_ADDRESS = 0x...   (the deployed EstateFactory)
+#   VITE_WC_PROJECT_ID   = ...     (Reown/WalletConnect project ID, for mobile)
 #
 # It is a *variable*, not a secret: the factory address is public on-chain and
 # is baked into the built JavaScript anyway. Marking it secret would only make
@@ -55,6 +56,9 @@ jobs:
           # If unset, the app still builds and renders — it shows a clear
           # "no factory configured" notice rather than failing the deploy.
           VITE_FACTORY_ADDRESS: ${{ vars.VITE_FACTORY_ADDRESS }}
+          # Needed only for mobile browsers, which cannot inject a wallet
+          # provider. If unset, the WalletConnect option is simply absent.
+          VITE_WC_PROJECT_ID: ${{ vars.VITE_WC_PROJECT_ID }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

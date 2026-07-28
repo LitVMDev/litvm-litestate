@@ -11,16 +11,22 @@ able to claim what they were left. So:
 
 - **No backend.** `npm run build` emits plain static files. Serve them from
   anywhere — IPFS, S3, a USB stick, `python3 -m http.server`.
-- **No third-party wallet relay.** Wallet connection uses the injected
-  connector only (MetaMask, Rabby, Brave, …). There is no WalletConnect
-  project ID and no relay server in the critical path.
+- **Direct wallet connection on desktop.** The injected connector (MetaMask,
+  Rabby, Brave, …) talks to the page with nothing in between.
+- **WalletConnect for mobile only.** Mobile browsers cannot inject a provider —
+  no wallet ships an extension for them — so a phone cannot connect without it.
+  It carries only the connection handshake; reads and signing still go direct,
+  and desktop users never touch it. Set `VITE_WC_PROJECT_ID` to enable it;
+  leave it unset and the option disappears.
 - **No analytics, no API keys.** The only network calls are to the LiteForge
   RPC and your own wallet.
 - **Relative asset paths** (`base: "./"`), so the build works from a
   subdirectory or an `ipfs://<cid>/` gateway path without rebuilding.
 
-Adding WalletConnect later would enable mobile wallets, but introduces a hosted
-relay dependency. That is a deliberate trade-off, not an oversight.
+The relay is a real dependency, so the guarantee is narrower than "no third
+parties": a beneficiary on a **desktop** browser can always claim from a saved
+copy of this build with no service involved. A beneficiary on a phone needs
+WalletConnect to be reachable, or must use their wallet app's own browser.
 
 ## Setup
 
@@ -74,9 +80,10 @@ and has moved between MetaMask versions, and a plain `http://` LAN address is
 not a secure context, so some browser APIs are restricted. Wallet injection
 generally still works; if something misbehaves, that is usually why.
 
-**For real mobile users**, WalletConnect is the only practical answer — a
-hosted relay would then sit in the connection path. That is a deliberate open
-decision, not an oversight.
+**Mobile browsers** now work through WalletConnect: the connect screen offers
+"Use a mobile wallet", which deep-links into the wallet app. This costs roughly
+1.5 MB of additional bundle (lazily chunked) and puts a hosted relay in the
+connection path — accepted because otherwise a phone cannot connect at all.
 
 ## Pages
 

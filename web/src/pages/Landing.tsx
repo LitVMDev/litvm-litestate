@@ -95,9 +95,9 @@ export function Landing() {
           <div className="card">
             <h4>Built to outlive us</h4>
             <p>
-              This page is a static file with no backend. Your beneficiaries can
-              claim using any copy of it and an ordinary wallet, even if this
-              project disappears entirely.
+              This page is a static file with no backend. On a computer, a
+              browser wallet talks to it directly — your beneficiaries can claim
+              from any copy of it even if this project disappears entirely.
             </p>
           </div>
         </div>

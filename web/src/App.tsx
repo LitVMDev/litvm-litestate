@@ -42,9 +42,11 @@ export default function App() {
         {route === "app" && <AppView />}
 
         <footer className="muted" style={{ fontSize: 12, marginTop: 40 }}>
-          Static build — no server, no analytics, no third-party wallet relay.
-          Keep a copy: this page plus a browser wallet is all a beneficiary needs
-          to claim. Testnet software, unaudited.
+          Static build — no server, no analytics. On a computer, a browser
+          wallet connects directly with nothing in between; connecting a phone
+          wallet uses the WalletConnect relay. Keep a copy: this page plus a
+          browser wallet is all a beneficiary needs to claim. Testnet software,
+          unaudited.
         </footer>
       </div>
     </>
