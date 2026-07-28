@@ -33,3 +33,7 @@ web/dist/
 # carry absolute local paths (launch.json, sftp.json), so it stays out.
 .vscode/*
 !.vscode/settings.json
+
+# Local operator runbook — deployment addresses, account names, chain notes.
+# Deliberately never published.
+DEV.md
