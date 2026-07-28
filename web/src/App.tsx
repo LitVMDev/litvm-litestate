@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { isAddress } from "viem";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract } from "wagmi";
 
 import { EstateFactoryAbi } from "./abis/EstateFactory";
 import { FACTORY_ADDRESS, isFactoryConfigured, liteforge } from "./wagmi";
@@ -14,6 +14,8 @@ import { CheckIn } from "./components/CheckIn";
 import { Landing } from "./pages/Landing";
 import { HowItWorks } from "./pages/HowItWorks";
 import { useEstate } from "./lib/useEstate";
+import { useDiscovery, type Role } from "./lib/useDiscovery";
+import { resolveToEstate } from "./lib/resolve";
 import { href, useRoute } from "./lib/useRoute";
 import { shortAddress } from "./lib/estate";
 
@@ -58,6 +60,9 @@ function AppView() {
   });
   const [tab, setTab] = useState<"manage" | "create">("manage");
   const [lookup, setLookup] = useState("");
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupNote, setLookupNote] = useState<string | null>(null);
+  const client = usePublicClient();
   // Set when a creation succeeds so we can jump to the new estate as soon as
   // the registry read catches up.
   const [awaitingNew, setAwaitingNew] = useState(false);
@@ -92,6 +97,14 @@ function AppView() {
   }, [selected]);
 
   const est = useEstate(selected, address);
+  const discovery = useDiscovery(address);
+
+  // Estates found by log scan that the factory registry does not know about —
+  // older factory versions, or estates where this wallet is a beneficiary or
+  // approver rather than the owner.
+  const extraFound = discovery.found.filter(
+    (f) => !myEstates.some((m) => m.toLowerCase() === f.estate.toLowerCase())
+  );
 
   const isOwner =
     Boolean(address && est.owner) && address!.toLowerCase() === est.owner!.toLowerCase();
@@ -126,10 +139,31 @@ function AppView() {
     );
   }
 
-  const openLookup = () => {
-    setSelected(lookup as `0x${string}`);
-    setTab("manage");
-    setLookup("");
+  // Accepts an estate OR a vault address — people hold whichever they were
+  // given, and a beneficiary is likely to have the vault, since that is where
+  // funds were sent.
+  const openLookup = async () => {
+    if (!client || !isAddress(lookup)) return;
+
+    setLookupBusy(true);
+    setLookupNote(null);
+
+    const found = await resolveToEstate(client, lookup as `0x${string}`);
+
+    if (found.kind === "unknown") {
+      setLookupNote(
+        "That address is not a LitEstate estate or vault on this network. Check you copied it correctly."
+      );
+    } else {
+      if (found.kind === "vault") {
+        setLookupNote("That was a vault address — opened the estate that owns it.");
+      }
+      setSelected(found.estate);
+      setTab("manage");
+      setLookup("");
+    }
+
+    setLookupBusy(false);
   };
 
   const nothingToShow = myEstates.length === 0 && !selected;
@@ -188,20 +222,47 @@ function AppView() {
 
             <p style={{ marginBottom: 14 }}>
               Were you named as a beneficiary or approver on someone else's
-              estate? Open it with the address you were given.
+              estate? Open it with the address you were given — either the
+              estate or its vault works.
             </p>
+            {lookupNote && (
+              <Notice tone={lookupNote.startsWith("That was a vault") ? "ok" : "error"}>
+                {lookupNote}
+              </Notice>
+            )}
+
             <div className="inline-form">
               <input
                 placeholder="0x…"
                 value={lookup}
                 onChange={(e) => setLookup(e.target.value)}
               />
-              <button className="secondary" onClick={openLookup} disabled={!isAddress(lookup)}>
-                Open
+              <button
+                className="secondary"
+                onClick={openLookup}
+                disabled={!isAddress(lookup) || lookupBusy}
+              >
+                {lookupBusy ? "Checking…" : "Open"}
               </button>
             </div>
+
+            <p className="help" style={{ marginTop: 18 }}>
+              Do not have the address? Use <strong>Search the network</strong>{" "}
+              above — it finds any estate that names this wallet.
+            </p>
           </div>
         </Panel>
+      )}
+
+      {tab === "manage" && (
+        <FindEstates
+          discovery={discovery}
+          extra={extraFound}
+          onOpen={(a) => {
+            setSelected(a);
+            setTab("manage");
+          }}
+        />
       )}
 
       {tab === "manage" && !nothingToShow && (
@@ -239,7 +300,7 @@ function AppView() {
 
               <Field
                 label="Open another by address"
-                help="Beneficiaries and approvers: paste the address you were given."
+                help="Beneficiaries and approvers: paste the address you were given — either the estate or its vault works."
               >
                 <div className="row">
                   <input
@@ -251,9 +312,9 @@ function AppView() {
                     <button
                       className="secondary"
                       onClick={openLookup}
-                      disabled={!isAddress(lookup)}
+                      disabled={!isAddress(lookup) || lookupBusy}
                     >
-                      Open
+                      {lookupBusy ? "Checking…" : "Open"}
                     </button>
                   </div>
                 </div>
@@ -328,5 +389,85 @@ function AppView() {
         </>
       )}
     </>
+  );
+}
+
+/// Log-scan discovery. Kept behind an explicit button rather than run on load:
+/// it makes several RPC round-trips, and most users arriving with an estate in
+/// the factory registry never need it.
+function FindEstates({
+  discovery,
+  extra,
+  onOpen,
+}: {
+  discovery: ReturnType<typeof useDiscovery>;
+  extra: { estate: `0x${string}`; roles: Role[] }[];
+  onOpen: (a: `0x${string}`) => void;
+}) {
+  const ROLE_LABEL: Record<Role, string> = {
+    owner: "You own it",
+    beneficiary: "You are a beneficiary",
+    approver: "You are an approver",
+  };
+
+  return (
+    <Panel
+      title="Search the network"
+      hint="Finds every estate that names this wallet — including ones created by older versions, and estates where you are a beneficiary or approver rather than the owner."
+    >
+      {discovery.error && <Notice tone="error">{discovery.error}</Notice>}
+
+      {extra.length > 0 && (
+        <div className="table-scroll" style={{ marginBottom: 14 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Estate</th>
+                <th>Your role</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {extra.map((f) => (
+                <tr key={f.estate}>
+                  <td>
+                    <span className="mono">{shortAddress(f.estate)}</span>
+                  </td>
+                  <td>
+                    {f.roles.map((r) => (
+                      <span key={r} className="badge ok" style={{ marginRight: 6 }}>
+                        {ROLE_LABEL[r]}
+                      </span>
+                    ))}
+                  </td>
+                  <td className="num">
+                    <button className="secondary" onClick={() => onOpen(f.estate)}>
+                      Open
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {discovery.hasScanned && extra.length === 0 && !discovery.isScanning && (
+        <Notice>
+          No other estates found for this wallet. If you were expecting one, ask
+          whoever set it up for the estate address and open it directly.
+        </Notice>
+      )}
+
+      <div className="actions">
+        <button onClick={discovery.scan} disabled={discovery.isScanning}>
+          {discovery.isScanning
+            ? `Searching… ${discovery.progress}%`
+            : discovery.hasScanned
+              ? "Search again"
+              : "Search the network"}
+        </button>
+      </div>
+    </Panel>
   );
 }

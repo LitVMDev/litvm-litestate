@@ -154,11 +154,14 @@ contract Estate {
         _;
     }
 
-    // Blocks checkIn() once grace has fully expired - beyond that point the
-    // estate is committed to its distribution phase and check-ins can no
-    // longer recover it.
-    modifier onlyBeforeDistributionPhase() {
-        if (graceExpired()) {
+    // Blocks checkIn() only once the estate has actually concluded the owner is
+    // gone. While it is still *asking* - AwaitingApproval, including after the
+    // approval window has closed - a signature from the owner is proof the
+    // premise is false, so they may still rebut it.
+    modifier onlyBeforeDistributionIsDue() {
+        EstateState current = getState();
+
+        if (current == EstateState.ReadyForDistribution || current == EstateState.Distributed) {
             revert DistributionNotReady();
         }
         _;
@@ -217,12 +220,29 @@ contract Estate {
     // Heartbeat & grace period
     // ------------------------------------------------------------
 
-    function checkIn() external onlyOwner onlyBeforeDistributionPhase {
-        // No approval can exist yet at this point: approveDistribution() only
-        // succeeds once grace has fully expired, and this function is only
-        // callable while grace has *not* expired (onlyBeforeDistributionPhase).
-        // So there is nothing to reset here - approvalCount is always still 0.
+    function checkIn() external onlyOwner onlyBeforeDistributionIsDue {
         lastCheckIn = block.timestamp;
+
+        // Approvals CAN exist here: an owner may check in while the estate is
+        // AwaitingApproval, rebutting a release already part-way through. Clear
+        // them, or a later lapse would resume from a stale count and release on
+        // fewer fresh approvals than the policy requires.
+        //
+        // Guarded so an ordinary check-in - by far the common case, and the one
+        // action that must never feel expensive - pays nothing for this.
+        if (approvalCount > 0) {
+            uint256 total = approverIds.length;
+
+            for (uint256 i = 0; i < total; i++) {
+                Approver storage approver = approvers[approverIds[i]];
+
+                if (approver.approved) {
+                    approver.approved = false;
+                }
+            }
+
+            approvalCount = 0;
+        }
 
         emit CheckedIn(owner, lastCheckIn);
     }
@@ -232,7 +252,22 @@ contract Estate {
 
         _validateTimeSettings();
 
+        // The new interval counts from now, not from the previous check-in.
+        //
+        // heartbeatExpiresAt() is lastCheckIn + interval, so leaving lastCheckIn
+        // alone would move the deadline backwards whenever the interval is
+        // shortened - far enough, into the past, taking a healthy estate
+        // straight through GracePeriod into distribution with no way back.
+        //
+        // Restarting the clock is also the honest reading of the action:
+        // calling this requires the owner's signature, which is exactly the
+        // evidence a check-in provides. It matches what "check in every N days"
+        // plainly means, and grants no power the owner lacks already, since
+        // they could call checkIn() immediately beforehand.
+        lastCheckIn = block.timestamp;
+
         emit HeartbeatUpdated(interval);
+        emit CheckedIn(owner, lastCheckIn);
     }
 
     function updateGracePeriod(uint256 period) external onlyOwner onlyWhileActive {

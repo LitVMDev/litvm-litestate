@@ -105,8 +105,14 @@ export function HowItWorks() {
           <h4>Awaiting approval</h4>
           <p>
             Only if you required approval. The grace period has passed and
-            approvers can now confirm the release. You can no longer check in.
-            If enough approve within the window, the estate becomes releasable.
+            approvers can now confirm the release. If enough approve within the
+            window, the estate becomes releasable.
+          </p>
+          <p>
+            <strong>You can still check in at this point.</strong> The estate is
+            asking whether you are gone, and a check-in answers it — any
+            approvals already given are cancelled and everything returns to
+            normal.
           </p>
         </div>
         <div className="tl-step urgent">
@@ -248,9 +254,11 @@ export function HowItWorks() {
           Checking in during the grace period unfreezes them.
         </li>
         <li>
-          <strong>When the grace period ends</strong>, you can no longer check
-          in at all. The estate is committed to releasing. You can still
-          withdraw funds, but you cannot restore it to Active.
+          <strong>When the estate becomes releasable</strong> — either the grace
+          period ends with no approval required, or enough approvers agree —
+          you can no longer check in. Until that moment you can always rebut it.
+          You can still withdraw funds afterwards, but you cannot restore the
+          estate to Active.
         </li>
       </ol>
       <p>
@@ -273,8 +281,9 @@ export function HowItWorks() {
         <li>
           <strong>Approvers who never act jam the estate.</strong> If the
           approval window closes without enough approvals, distribution becomes
-          impossible. A living owner can still withdraw the funds, but if you
-          are gone, they stay locked.
+          impossible and your beneficiaries cannot claim. A living owner can
+          check in to reset the whole thing, or simply withdraw — but if you are
+          gone, the funds stay locked.
         </li>
         <li>
           <strong>Anyone with your keys is you.</strong> The contract cannot

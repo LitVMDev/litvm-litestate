@@ -6,6 +6,7 @@ pragma solidity ^0.8.30;
 // deliberate design decision.
 
 import "./helpers/EstateTestBase.sol";
+import "../src/EstateFactory.sol";
 
 // ------------------------------------------------------------
 // Fixed
@@ -381,6 +382,167 @@ contract Regression_ResiduaryRequired is EstateTestBase {
         vm.prank(ownerAddr);
         vm.expectRevert(ResiduaryBeneficiaryRequired.selector);
         estate.setResiduaryBeneficiary(address(0));
+    }
+}
+
+contract Regression_MisdirectedFunds is EstateTestBase {
+    // Only the vault holds funds. Estate and EstateFactory deliberately have no
+    // receive() or fallback(), so a transfer to the wrong address reverts and
+    // the sender keeps their money rather than losing it to a contract that
+    // cannot pay it back out.
+    //
+    // If anyone ever adds a receive() to Estate, this test should fail loudly.
+    function test_PlainTransferToEstateReverts() public {
+        (Estate estate,) = deployEstateWithVault(DistributionMode.Automatic, 0);
+
+        vm.deal(stranger, 10 ether);
+        vm.prank(stranger);
+        (bool ok,) = address(estate).call{value: 1 ether}("");
+
+        assertFalse(ok, "Estate must not accept plain transfers");
+        assertEq(address(estate).balance, 0);
+        assertEq(stranger.balance, 10 ether, "sender keeps their funds");
+    }
+
+    function test_PlainTransferToFactoryReverts() public {
+        EstateFactory f = new EstateFactory(testLimits());
+
+        vm.deal(stranger, 10 ether);
+        vm.prank(stranger);
+        (bool ok,) = address(f).call{value: 1 ether}("");
+
+        assertFalse(ok, "Factory must not accept plain transfers");
+        assertEq(address(f).balance, 0);
+    }
+
+    function test_VaultIsTheOnlyFundingPath() public {
+        (Estate estate, EstateVault vault) = deployEstateWithVault(DistributionMode.Automatic, 0);
+        vm.prank(ownerAddr);
+        estate.addBeneficiary(ben1, 10_000);
+
+        vm.deal(stranger, 10 ether);
+        vm.prank(stranger);
+        (bool ok,) = address(vault).call{value: 5 ether}("");
+
+        assertTrue(ok);
+        assertEq(address(vault).balance, 5 ether);
+    }
+}
+
+contract Regression_TimingEdits is EstateTestBase {
+    // F17: heartbeatExpiresAt() is lastCheckIn + interval, so leaving
+    // lastCheckIn alone while shortening the interval moved the deadline
+    // backwards. Shortened past the elapsed time it landed in the past, taking
+    // a healthy estate straight through GracePeriod into ReadyForDistribution
+    // — and checkIn() is barred once grace has expired, so the owner could not
+    // undo it. One parameter could release an entire estate irreversibly.
+    //
+    // updateHeartbeat now restarts the clock, so the deadline is always
+    // now + interval and can never land in the past.
+    function test_ShorteningHeartbeatRestartsTheClockInsteadOfExpiring() public {
+        Estate estate = deployEstate(DistributionMode.Automatic, 0);
+
+        vm.prank(ownerAddr);
+        estate.updateHeartbeat(365 days);
+
+        vm.warp(block.timestamp + 300 days);
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
+
+        // 60 days is far less than the 300 already elapsed.
+        vm.prank(ownerAddr);
+        estate.updateHeartbeat(60 days);
+
+        // Still healthy, and the deadline is a full 60 days from now.
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
+        assertFalse(estate.heartbeatExpired());
+        assertEq(estate.lastCheckIn(), block.timestamp);
+        assertEq(estate.heartbeatExpiresAt(), block.timestamp + 60 days);
+    }
+
+    // The reset is a real check-in, so it emits CheckedIn for indexers and the
+    // UI countdown.
+    function test_UpdateHeartbeatEmitsCheckedIn() public {
+        Estate estate = deployEstate(DistributionMode.Automatic, 0);
+
+        vm.warp(block.timestamp + 5 days);
+
+        vm.expectEmit(true, false, false, true, address(estate));
+        emit Estate.CheckedIn(ownerAddr, block.timestamp);
+
+        vm.prank(ownerAddr);
+        estate.updateHeartbeat(60 days);
+    }
+
+    // Extending works the same way: the full new period, counted from now.
+    function test_ExtendingHeartbeatAlsoCountsFromNow() public {
+        Estate estate = deployEstate(DistributionMode.Automatic, 0);
+
+        vm.warp(block.timestamp + 20 days);
+
+        vm.prank(ownerAddr);
+        estate.updateHeartbeat(200 days);
+
+        assertEq(estate.heartbeatExpiresAt(), block.timestamp + 200 days);
+    }
+
+    // Shortening is fine as long as the deadline stays in the future.
+    function test_ShorteningHeartbeatIsAllowedWhenDeadlineStaysFuture() public {
+        Estate estate = deployEstate(DistributionMode.Automatic, 0);
+
+        vm.prank(ownerAddr);
+        estate.updateHeartbeat(365 days);
+
+        vm.warp(block.timestamp + 10 days);
+
+        vm.prank(ownerAddr);
+        estate.updateHeartbeat(60 days);
+
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
+        assertEq(estate.heartbeatExpiresAt(), estate.lastCheckIn() + 60 days);
+        assertEq(estate.lastCheckIn(), block.timestamp); // clock restarted
+    }
+
+    // Checking in first resets the clock, making any valid interval safe.
+    function test_CheckInFirstThenShortenWorks() public {
+        Estate estate = deployEstate(DistributionMode.Automatic, 0);
+
+        vm.startPrank(ownerAddr);
+        estate.updateHeartbeat(365 days);
+        vm.warp(block.timestamp + 300 days);
+
+        estate.checkIn(); // resets lastCheckIn to now
+        estate.updateHeartbeat(PLATFORM_MIN_HEARTBEAT);
+        vm.stopPrank();
+
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
+    }
+
+    // Grace has no equivalent hazard: graceEndsAt is heartbeatExpiresAt +
+    // period, and onlyWhileActive guarantees heartbeatExpiresAt is in the
+    // future, so shortening grace can never land in the past.
+    function test_ShorteningGraceIsAlwaysSafe() public {
+        Estate estate = deployEstate(DistributionMode.Automatic, 0);
+
+        vm.startPrank(ownerAddr);
+        estate.updateGracePeriod(PLATFORM_MAX_GRACE);
+        estate.updateGracePeriod(PLATFORM_MIN_GRACE);
+        vm.stopPrank();
+
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
+        assertFalse(estate.graceExpired());
+    }
+
+    function test_TimingCannotBeEditedOnceHeartbeatLapsed() public {
+        Estate estate = deployEstate(DistributionMode.Automatic, 0);
+        warpPastHeartbeat();
+
+        vm.startPrank(ownerAddr);
+        vm.expectRevert(HeartbeatExpired.selector);
+        estate.updateHeartbeat(60 days);
+
+        vm.expectRevert(HeartbeatExpired.selector);
+        estate.updateGracePeriod(30 days);
+        vm.stopPrank();
     }
 }
 
