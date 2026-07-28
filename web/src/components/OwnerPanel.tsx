@@ -149,6 +149,9 @@ function BeneficiariesCard({
   const [percent, setPercent] = useState("");
   const [residuary, setResiduary] = useState("");
   const [reviewAdd, setReviewAdd] = useState(false);
+  const [editingId, setEditingId] = useState<bigint | null>(null);
+  const [editPercent, setEditPercent] = useState("");
+  const [reviewEdit, setReviewEdit] = useState(false);
   const [reviewResiduary, setReviewResiduary] = useState(false);
   const [removing, setRemoving] = useState<Beneficiary | null>(null);
 
@@ -157,6 +160,9 @@ function BeneficiariesCard({
     setPercent("");
     setReviewAdd(false);
     setRemoving(null);
+    setReviewEdit(false);
+    setEditingId(null);
+    setEditPercent("");
     refetch();
   });
   const residuaryTx = useTx(() => {
@@ -176,6 +182,37 @@ function BeneficiariesCard({
 
   // Clearing the residuary while the vault is funded and shares total under
   // 100% leaves part of the estate with no destination — the contract reverts.
+  // --- editing an existing share -------------------------------------
+  const editing = beneficiaries.find((b) => b.id === editingId);
+  const editBps = Math.round(Number(editPercent) * 100);
+  const editTotal = editing
+    ? Number(info.totalAllocatedBps) - editing.shareBps + editBps
+    : 0;
+
+  // Mirrors the contract: the new share must be above zero, the total must not
+  // exceed 100%, and — while the vault holds funds with no residuary named —
+  // must land exactly on 100%, or the freed portion would have no destination.
+  const editError: string | null = !editing
+    ? null
+    : !Number.isFinite(editBps) || editBps <= 0
+      ? "Enter a share above 0%."
+      : editTotal > BPS_TOTAL
+        ? `That would take the total to ${bpsToPercent(editTotal)}. The most this beneficiary can have is ${bpsToPercent(BPS_TOTAL - (Number(info.totalAllocatedBps) - editing.shareBps))}.`
+        : funded && !hasResiduary && editTotal < BPS_TOTAL
+          ? `That would leave ${bpsToPercent(BPS_TOTAL - editTotal)} unallocated. While the vault holds funds, name a residuary beneficiary first or keep the total at 100%.`
+          : null;
+
+  const editValid = Boolean(editing) && editPercent !== "" && !editError;
+
+  const startEdit = (b: Beneficiary) => {
+    setEditingId(b.id);
+    setEditPercent(String(b.shareBps / 100));
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditPercent("");
+  };
+
   const clearingResiduaryBlocked =
     isAddress(residuary) &&
     residuary.toLowerCase() === "0x0000000000000000000000000000000000000000" &&
@@ -244,17 +281,56 @@ function BeneficiariesCard({
                 <td>
                   <AddressLink address={b.wallet} />
                 </td>
-                <td className="num">{bpsToPercent(b.shareBps)}</td>
+                <td className="num">
+                  {editingId === b.id ? (
+                    <input
+                      type="number"
+                      value={editPercent}
+                      min={0.01}
+                      step={0.01}
+                      autoFocus
+                      style={{ maxWidth: 110, textAlign: "right" }}
+                      onChange={(e) => setEditPercent(e.target.value)}
+                    />
+                  ) : (
+                    bpsToPercent(b.shareBps)
+                  )}
+                </td>
                 {editable && (
                   <td className="num">
-                    <button
-                      className="secondary"
-                      onClick={() => setRemoving(b)}
-                      disabled={Boolean(blockedReason(b)) || tx.isPending || tx.isConfirming}
-                      title={blockedReason(b) ?? undefined}
-                    >
-                      Remove
-                    </button>
+                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                      {editingId === b.id ? (
+                        <>
+                          <button
+                            onClick={() => setReviewEdit(true)}
+                            disabled={!editValid || tx.isPending || tx.isConfirming}
+                          >
+                            Save
+                          </button>
+                          <button className="secondary" onClick={cancelEdit}>
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="secondary"
+                            onClick={() => startEdit(b)}
+                            disabled={tx.isPending || tx.isConfirming}
+                          >
+                            Edit share
+                          </button>
+                          <button
+                            className="secondary"
+                            onClick={() => setRemoving(b)}
+                            disabled={Boolean(blockedReason(b)) || tx.isPending || tx.isConfirming}
+                            title={blockedReason(b) ?? undefined}
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
@@ -269,6 +345,8 @@ function BeneficiariesCard({
           <AddressLink address={info.residuaryBeneficiary} />
         </div>
       </div>
+
+      {editing && editError && <Notice tone="error">{editError}</Notice>}
 
       {editable && funded && !hasResiduary && beneficiaries.some((b) => blockedReason(b)) && (
         <Notice tone="warn">
@@ -449,6 +527,37 @@ function BeneficiariesCard({
           })
         }
         onCancel={() => setReviewResiduary(false)}
+      />
+
+      <Confirm
+        open={reviewEdit && Boolean(editing)}
+        title="Change this share?"
+        intro="Shares are literal percentages of whatever the vault holds when the estate is released."
+        rows={
+          editing
+            ? [
+                { k: "Wallet", v: <Mono>{editing.wallet}</Mono> },
+                { k: "Current share", v: bpsToPercent(editing.shareBps) },
+                { k: "New share", v: bpsToPercent(editBps) },
+                { k: "Allocated after this", v: bpsToPercent(editTotal) },
+                {
+                  k: "Still unallocated",
+                  v: bpsToPercent(BPS_TOTAL - editTotal),
+                },
+              ]
+            : []
+        }
+        confirmLabel="Update share"
+        onConfirm={() =>
+          editing &&
+          tx.send({
+            address: estate,
+            abi: EstateAbi,
+            functionName: "updateBeneficiary",
+            args: [editing.id, editBps],
+          })
+        }
+        onCancel={() => setReviewEdit(false)}
       />
 
       <Confirm
