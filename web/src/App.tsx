@@ -360,6 +360,8 @@ function AppView() {
                   info={est.info}
                   beneficiaries={est.beneficiaries}
                   approvers={est.approvers}
+                  policy={est.policy}
+                  mode={est.settings?.[2]}
                   vaultBalance={est.vaultBalance}
                   distributed={est.distributed}
                   refetch={est.refetch}

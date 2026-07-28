@@ -48,6 +48,8 @@ export function OwnerPanel({
   info,
   beneficiaries,
   approvers,
+  policy,
+  mode,
   vaultBalance,
   distributed,
   refetch,
@@ -58,6 +60,10 @@ export function OwnerPanel({
   info: EstateInfo;
   beneficiaries: readonly Beneficiary[];
   approvers: Approver[];
+  /// [rule, threshold, approvalWindow] — rule 0=AnyOne 1=All 2=Threshold
+  policy?: readonly [number, number, bigint];
+  /// 0 = Automatic, 1 = ApprovalRequired
+  mode?: number;
   vaultBalance?: bigint;
   distributed?: boolean;
   refetch: () => void;
@@ -102,6 +108,8 @@ export function OwnerPanel({
         estate={estate}
         owner={owner}
         approvers={approvers}
+        policy={policy}
+        mode={mode}
         info={info}
         editable={editable}
         refetch={refetch}
@@ -166,6 +174,14 @@ function BeneficiariesCard({
   const hasResiduary =
     info.residuaryBeneficiary !== "0x0000000000000000000000000000000000000000";
 
+  // Clearing the residuary while the vault is funded and shares total under
+  // 100% leaves part of the estate with no destination — the contract reverts.
+  const clearingResiduaryBlocked =
+    isAddress(residuary) &&
+    residuary.toLowerCase() === "0x0000000000000000000000000000000000000000" &&
+    funded &&
+    Number(info.totalAllocatedBps) < BPS_TOTAL;
+
   const blockedReason = (b: Beneficiary): string | null => {
     if (!funded || hasResiduary) return null;
 
@@ -183,8 +199,21 @@ function BeneficiariesCard({
   const remaining = BPS_TOTAL - Number(info.totalAllocatedBps);
   const walletIsSelf = isSelf(wallet, owner);
   const residuaryIsSelf = isSelf(residuary, owner);
+
+  // The contract rejects a wallet that is already an active beneficiary. A
+  // removed one is fine to re-add, and `beneficiaries` holds only active
+  // entries, so comparing against it matches the contract exactly.
+  const walletIsDuplicate =
+    isAddress(wallet) &&
+    beneficiaries.some((b) => b.wallet.toLowerCase() === wallet.toLowerCase());
+
   const addValid =
-    isAddress(wallet) && !walletIsSelf && bps > 0 && bps <= remaining && percent !== "";
+    isAddress(wallet) &&
+    !walletIsSelf &&
+    !walletIsDuplicate &&
+    bps > 0 &&
+    bps <= remaining &&
+    percent !== "";
 
   return (
     <Panel
@@ -294,6 +323,12 @@ function BeneficiariesCard({
                   {SELF_WARNING}
                 </div>
               )}
+              {walletIsDuplicate && (
+                <div className="muted" style={{ fontSize: 12, marginTop: 4, color: "var(--urgent)" }}>
+                  This wallet is already a beneficiary. Change their share in the
+                  table above instead of adding them twice.
+                </div>
+              )}
             </div>
             <div className="field">
               <label>Share (%)</label>
@@ -340,6 +375,13 @@ function BeneficiariesCard({
                 {SELF_WARNING}
               </div>
             )}
+            {clearingResiduaryBlocked && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 4, color: "var(--urgent)" }}>
+                The residuary beneficiary cannot be cleared while shares total{" "}
+                {bpsToPercent(info.totalAllocatedBps)} and the vault holds funds —
+                the remainder would have nowhere to go.
+              </div>
+            )}
           </div>
           <div className="actions">
             <button
@@ -348,6 +390,7 @@ function BeneficiariesCard({
               disabled={
                 !isAddress(residuary) ||
                 residuaryIsSelf ||
+                clearingResiduaryBlocked ||
                 residuaryTx.isPending ||
                 residuaryTx.isConfirming
               }
@@ -445,12 +488,16 @@ function ApproversCard({
   estate,
   owner,
   approvers,
+  policy,
+  mode,
   info,
   editable,
   refetch,
 }: {
   estate: `0x${string}`;
   owner: `0x${string}`;
+  policy?: readonly [number, number, bigint];
+  mode?: number;
   approvers: Approver[];
   info: EstateInfo;
   editable: boolean;
@@ -469,6 +516,31 @@ function ApproversCard({
 
   const active = approvers.filter((a) => a.active);
   const approverIsSelf = isSelf(wallet, owner);
+  const approverIsDuplicate =
+    isAddress(wallet) &&
+    active.some((a) => a.wallet.toLowerCase() === wallet.toLowerCase());
+
+  // The contract refuses a removal that leaves a quorum nobody could reach.
+  // AnyOne and All track the live count so they only fail at zero; a fixed
+  // Threshold fails as soon as the count drops below it.
+  const APPROVAL_REQUIRED = 1;
+  const RULE_THRESHOLD = 2;
+
+  const removalBlockedReason = (): string | null => {
+    if (mode !== APPROVAL_REQUIRED) return null;
+
+    const remaining = active.length - 1;
+
+    if (remaining === 0) {
+      return "This estate requires approval, so it must keep at least one approver. Add a replacement before removing this one.";
+    }
+    if (policy && policy[0] === RULE_THRESHOLD && policy[1] > remaining) {
+      return `This estate needs ${policy[1]} approvals, so it must keep at least ${policy[1]} approvers. Add a replacement before removing this one.`;
+    }
+    return null;
+  };
+
+  const removalBlocked = removalBlockedReason();
 
   return (
     <Panel
@@ -509,7 +581,8 @@ function ApproversCard({
                     <button
                       className="secondary"
                       onClick={() => setRemoving(a)}
-                      disabled={tx.isPending || tx.isConfirming}
+                      disabled={Boolean(removalBlocked) || tx.isPending || tx.isConfirming}
+                      title={removalBlocked ?? undefined}
                     >
                       Remove
                     </button>
@@ -520,6 +593,10 @@ function ApproversCard({
           </tbody>
         </table>
       </div>
+
+      {editable && removalBlocked && (
+        <Notice tone="warn">{removalBlocked}</Notice>
+      )}
 
       {active.length > 0 && (
         <Notice>
@@ -544,6 +621,11 @@ function ApproversCard({
                 matters once you are no longer around to give it.
               </div>
             )}
+            {approverIsDuplicate && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 4, color: "var(--urgent)" }}>
+                This wallet is already an approver on this estate.
+              </div>
+            )}
           </div>
           <div className="actions">
             <button
@@ -551,6 +633,7 @@ function ApproversCard({
               disabled={
                 !isAddress(wallet) ||
                 approverIsSelf ||
+                approverIsDuplicate ||
                 active.length >= MAX_APPROVERS ||
                 tx.isPending ||
                 tx.isConfirming
