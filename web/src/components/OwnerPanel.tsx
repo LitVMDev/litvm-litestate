@@ -17,6 +17,7 @@ import type { Approver, Beneficiary } from "../lib/useEstate";
 import { useTx } from "../lib/useTx";
 import { useEstateLimits } from "../lib/useEstateLimits";
 import { AddressLink, Field, Notice, Panel, TxStatus } from "./Common";
+import { ShareAddress } from "./ShareAddress";
 import { Confirm, Mono } from "./Confirm";
 
 /// parseEther throws on malformed input ("1..5", "1e5", too many decimals),
@@ -75,6 +76,15 @@ export function OwnerPanel({
           enters its distribution phase, its terms are locked.
         </Notice>
       )}
+
+      <ShareAddress
+        estate={estate}
+        vault={vault}
+        hasRecipients={
+          info.beneficiaryCount > 0 ||
+          info.residuaryBeneficiary !== "0x0000000000000000000000000000000000000000"
+        }
+      />
 
       <TimingCard estate={estate} info={info} editable={editable} refetch={refetch} />
 
@@ -205,6 +215,14 @@ function BeneficiariesCard({
         </div>
       </div>
 
+      {beneficiaries.length > 0 && (
+        <Notice>
+          <strong>Have you given each of them the estate address?</strong> They
+          cannot find it themselves — there is no way to search for an estate you
+          are named in. It is at the top of this page.
+        </Notice>
+      )}
+
       {remaining > 0 &&
         info.residuaryBeneficiary === "0x0000000000000000000000000000000000000000" && (
           <Notice tone="warn">
@@ -308,7 +326,7 @@ function BeneficiariesCard({
             v: bpsToPercent(BPS_TOTAL - Number(info.totalAllocatedBps) - bps),
           },
         ]}
-        acknowledge="I have checked this address is correct. If it is wrong, the funds cannot be recovered once the estate is released."
+        acknowledge="I have checked this address is correct, and I will give this person the estate address to keep — without it they cannot reach the estate."
         confirmLabel="Add beneficiary"
         onConfirm={() =>
           tx.send({
@@ -458,6 +476,13 @@ function ApproversCard({
         </table>
       </div>
 
+      {active.length > 0 && (
+        <Notice>
+          <strong>Have you given each approver the estate address?</strong> They
+          need it to approve when the time comes, and cannot find it themselves.
+        </Notice>
+      )}
+
       {editable && (
         <>
           <TxStatus {...tx} />
@@ -506,7 +531,7 @@ function ApproversCard({
           { k: "Approvers after this", v: active.length + 1 },
           { k: "Approvals needed to release", v: info.requiredApprovals },
         ]}
-        acknowledge="I have checked this address, and I trust this person to act when the time comes."
+        acknowledge="I have checked this address, I trust this person to act when the time comes, and I will give them the estate address to keep."
         confirmLabel="Add approver"
         onConfirm={() =>
           tx.send({

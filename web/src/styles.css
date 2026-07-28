@@ -470,3 +470,31 @@ nav.site a[aria-current="page"] {
 @media (prefers-reduced-motion: reduce) {
   .checkin .pulse { animation: none !important; }
 }
+
+/* ============================================================
+   Share-the-address card
+   ============================================================ */
+
+.share {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.share h2 { font-size: 15px; margin: 0 0 6px; }
+.share p { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin: 0 0 14px; }
+.share .addr-row {
+  display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap;
+}
+.share .addr {
+  flex: 1 1 260px; min-width: 0;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px; overflow-x: auto; white-space: nowrap;
+}
+.share .addr-label {
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); margin-bottom: 5px;
+}
+.share .pair { margin-bottom: 12px; }

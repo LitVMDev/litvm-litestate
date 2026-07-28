@@ -117,10 +117,19 @@ what applies:
 - **Anyone** — trigger distribution once an estate is ready. This only moves
   funds into each beneficiary's claimable balance; it cannot redirect them.
 
-Estates you created are listed from the factory registry. Approvers and
-beneficiaries open an estate by pasting its address — worth telling them the
-address in advance, since nothing on-chain links a beneficiary to an estate
-until distribution.
+Estates you created are listed from the factory registry (`estatesOf(owner)`),
+which is a mapping read and stays instant regardless of chain age.
+
+**Beneficiaries and approvers must be given the estate address.** They appear in
+no on-chain index, so there is nothing to look them up by. A log scan was built
+and then removed: LiteForge produces ~126 million blocks a year at ~0.25s per
+block, so a scan taking 10 seconds today would take ~3.8 hours after one year
+and ~75 hours after twenty. It degrades exactly when it matters most — years
+later, once the owner has died.
+
+The owner view therefore shows the estate and vault addresses prominently with
+copy buttons, and reminds the owner to distribute them every time a beneficiary
+or approver is added.
 
 ## Things worth knowing
 
