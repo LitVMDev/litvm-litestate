@@ -94,6 +94,7 @@ export function OwnerPanel({
         info={info}
         beneficiaries={beneficiaries}
         editable={editable}
+        vaultBalance={vaultBalance}
         refetch={refetch}
       />
 
@@ -125,6 +126,7 @@ function BeneficiariesCard({
   info,
   beneficiaries,
   editable,
+  vaultBalance,
   refetch,
 }: {
   estate: `0x${string}`;
@@ -132,6 +134,7 @@ function BeneficiariesCard({
   info: EstateInfo;
   beneficiaries: readonly Beneficiary[];
   editable: boolean;
+  vaultBalance?: bigint;
   refetch: () => void;
 }) {
   const [wallet, setWallet] = useState("");
@@ -153,6 +156,28 @@ function BeneficiariesCard({
     setReviewResiduary(false);
     refetch();
   });
+
+  // Once the vault holds funds, an edit may not leave any portion of the
+  // estate without a destination. Removing a beneficiary from a fully
+  // allocated estate frees up their share, so it needs somewhere to go —
+  // the contract reverts otherwise, and MetaMask reports that only as
+  // "network fee unavailable" because it fails at gas estimation.
+  const funded = (vaultBalance ?? 0n) > 0n;
+  const hasResiduary =
+    info.residuaryBeneficiary !== "0x0000000000000000000000000000000000000000";
+
+  const blockedReason = (b: Beneficiary): string | null => {
+    if (!funded || hasResiduary) return null;
+
+    const remainingCount = beneficiaries.length - 1;
+    if (remainingCount === 0) {
+      return "This is the only recipient, and the vault holds funds. Name a residuary beneficiary first, or withdraw the funds before removing them.";
+    }
+    if (Number(info.totalAllocatedBps) - b.shareBps < BPS_TOTAL) {
+      return `Removing them would leave ${bpsToPercent(b.shareBps)} of the vault unallocated. Name a residuary beneficiary first, or withdraw the funds before removing them.`;
+    }
+    return null;
+  };
 
   const bps = Math.round(Number(percent) * 100);
   const remaining = BPS_TOTAL - Number(info.totalAllocatedBps);
@@ -196,7 +221,8 @@ function BeneficiariesCard({
                     <button
                       className="secondary"
                       onClick={() => setRemoving(b)}
-                      disabled={tx.isPending || tx.isConfirming}
+                      disabled={Boolean(blockedReason(b)) || tx.isPending || tx.isConfirming}
+                      title={blockedReason(b) ?? undefined}
                     >
                       Remove
                     </button>
@@ -214,6 +240,25 @@ function BeneficiariesCard({
           <AddressLink address={info.residuaryBeneficiary} />
         </div>
       </div>
+
+      {editable && funded && !hasResiduary && beneficiaries.some((b) => blockedReason(b)) && (
+        <Notice tone="warn">
+          <strong>Beneficiaries cannot be removed right now.</strong> The vault
+          holds funds and every share is allocated, so removing anyone would
+          leave part of the estate with no destination. Either:
+          <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+            <li>
+              name a <strong>residuary beneficiary</strong> below — they receive
+              whatever is unallocated, which frees you to change shares
+              afterwards; or
+            </li>
+            <li>
+              withdraw the vault's funds first, make the change, then deposit
+              again.
+            </li>
+          </ul>
+        </Notice>
+      )}
 
       {beneficiaries.length > 0 && (
         <Notice>
