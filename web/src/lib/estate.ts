@@ -134,7 +134,7 @@ const ERROR_HELP: Record<string, string> = {
   NotApprover: "This wallet is not an active approver on this estate.",
   NotVault: "Only the linked vault can call that.",
   InvalidOwner: "The owner address is not valid.",
-  InvalidHeartbeat: "Check-in interval is outside the range this factory allows.",
+  InvalidHeartbeat: "Check-in interval is outside the range this estate allows.",
   InvalidGracePeriod: "Grace period is outside the range this factory allows.",
   HeartbeatExpired:
     "The check-in deadline has passed, so the estate can no longer be edited.",

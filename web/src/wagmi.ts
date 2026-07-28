@@ -42,8 +42,37 @@ declare module "wagmi" {
   }
 }
 
-export const FACTORY_ADDRESS = (import.meta.env.VITE_FACTORY_ADDRESS ??
-  "") as `0x${string}`;
+export const FACTORY_ADDRESS = (import.meta.env.VITE_FACTORY_ADDRESS ?? "") as `0x${string}`;
+
+/// Every factory ever deployed, oldest first, each with the block it was
+/// created in.
+///
+/// Contracts are immutable, so a bug fix means deploying a *new* factory at a
+/// new address. Estates created by older factories keep working forever, but
+/// they are invisible to the new factory's registry — so the app scans all of
+/// them when looking for a wallet's estates.
+///
+/// The deploy block matters: an estate cannot predate its factory, so this
+/// bounds a log scan to a few thousand blocks instead of the chain's 34M.
+/// Never remove an entry; that would orphan everyone who used it.
+export const KNOWN_FACTORIES: { address: `0x${string}`; deployBlock: bigint; label: string }[] = [
+  {
+    address: "0xc800bb6b98E1fFAD4A54c4E39023A7D4EF91472F",
+    deployBlock: 34302031n,
+    label: "v1",
+  },
+  {
+    address: "0x0154ef95526e6f6901f78C8235c28aa1C05d0e15",
+    deployBlock: 34389907n,
+    label: "v2",
+  },
+];
+
+/// Earliest block any estate could exist in.
+export const EARLIEST_ESTATE_BLOCK = KNOWN_FACTORIES.reduce(
+  (min, f) => (f.deployBlock < min ? f.deployBlock : min),
+  KNOWN_FACTORIES[0]?.deployBlock ?? 0n
+);
 
 export function isFactoryConfigured(): boolean {
   return (

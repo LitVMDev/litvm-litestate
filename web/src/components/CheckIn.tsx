@@ -26,7 +26,12 @@ export function CheckIn({
   const checkInLeft = timeUntil(info.heartbeatEnds, now);
   const graceLeft = timeUntil(info.graceEnds, now);
 
-  const canCheckIn = state === EstateState.Active || state === EstateState.GracePeriod;
+  // Rebutting is possible right up until the estate concludes the owner is
+  // gone — including while approvers are still deciding.
+  const canCheckIn =
+    state === EstateState.Active ||
+    state === EstateState.GracePeriod ||
+    state === EstateState.AwaitingApproval;
 
   // How much of the current interval has been used up.
   const start = Number(info.lastCheckIn);
@@ -36,7 +41,7 @@ export function CheckIn({
   // Nudge into "warn" for the last fifth of the interval, so the change is
   // visible well before it becomes a problem.
   let tone: "ok" | "warn" | "urgent" | "done" = "ok";
-  if (state === EstateState.GracePeriod) tone = "urgent";
+  if (state === EstateState.GracePeriod || state === EstateState.AwaitingApproval) tone = "urgent";
   else if (state === EstateState.Active && elapsed > 0.8) tone = "warn";
   else if (!canCheckIn) tone = "done";
 
@@ -49,6 +54,9 @@ export function CheckIn({
   } else if (state === EstateState.GracePeriod) {
     headline = graceLeft ?? "Grace period over";
     sub = "left to check in before your estate is released";
+  } else if (state === EstateState.AwaitingApproval) {
+    headline = "Approval under way";
+    sub = "Your approvers are deciding whether to release your estate — check in now to stop it";
   } else if (state === EstateState.Distributed) {
     headline = "Estate distributed";
     sub = "This estate has been released to its beneficiaries.";
@@ -62,7 +70,9 @@ export function CheckIn({
       <div className="eyebrow-row">
         <span className="pulse" aria-hidden="true" />
         <span className="label">
-          {state === EstateState.GracePeriod ? "Action needed" : "Check in"}
+          {state === EstateState.GracePeriod || state === EstateState.AwaitingApproval
+            ? "Action needed"
+            : "Check in"}
         </span>
       </div>
 
@@ -109,11 +119,18 @@ export function CheckIn({
             your beneficiaries can claim and you will not be able to stop it.
           </>
         )}
+        {state === EstateState.AwaitingApproval && (
+          <>
+            <strong>You can still stop this.</strong> Checking in proves you are
+            here, cancels any approvals already given, and returns your estate to
+            normal. Once enough approvers have agreed, it is too late.
+          </>
+        )}
         {!canCheckIn && state !== EstateState.Distributed && (
           <>
-            Check-ins are only possible up to the end of the grace period. You can
-            still withdraw the vault's funds, but the estate cannot return to
-            active.
+            Your approvers have agreed to release this estate, so it can no longer
+            be recovered. You can still withdraw the vault's funds until someone
+            distributes it.
           </>
         )}
       </p>

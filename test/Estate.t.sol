@@ -584,33 +584,71 @@ contract EstateHeartbeatAndGraceTest is EstateTestBase {
         assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
     }
 
-    function test_CheckInRevertsAfterGraceExpired() public {
+    // Grace expiring is no longer the cut-off. In ApprovalRequired mode the
+    // estate is merely AwaitingApproval, still asking whether the owner is
+    // gone, so a signature from them rebuts it.
+    function test_CheckInStillWorksWhileAwaitingApproval() public {
         warpPastGrace();
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.AwaitingApproval));
+
+        vm.prank(ownerAddr);
+        estate.checkIn();
+
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
+    }
+
+    // The real cut-off: once the estate has concluded the owner is gone.
+    function test_CheckInRevertsOnceReadyForDistribution() public {
+        warpPastGrace();
+
+        vm.prank(approver1);
+        estate.approveDistribution(); // requiredApprovals is 1 in this suite
+
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.ReadyForDistribution));
 
         vm.prank(ownerAddr);
         vm.expectRevert(DistributionNotReady.selector);
         estate.checkIn();
     }
 
-    function test_ApprovalCountCannotBeNonZeroWhileCheckInIsStillAllowed() public {
-        // approveDistribution() only succeeds once getState() == AwaitingApproval,
-        // which requires graceExpired() == true. checkIn() only succeeds while
-        // graceExpired() == false. Since graceExpired() is monotonic (time only
-        // moves forward), no approval can ever be recorded before grace expiry
-        // permanently blocks checkIn() - so the "reset approvals" loop inside
-        // checkIn() can never actually fire. This test pins that behavior.
-        vm.prank(ownerAddr);
-        estate.addApprover(approver2);
+    // A rebuttal must clear approvals already given, or a later lapse would
+    // resume from a stale count and release on fewer fresh approvals than the
+    // policy requires.
+    function test_CheckInClearsApprovalsAlreadyGiven() public {
+        // Threshold of 3 so a single approval leaves the estate still
+        // AwaitingApproval rather than jumping to ReadyForDistribution.
+        Estate multi = deployEstate(DistributionMode.ApprovalRequired, 3);
+
+        vm.startPrank(ownerAddr);
+        multi.addApprover(approver1);
+        multi.addApprover(approver2);
+        multi.addApprover(approver3);
+        vm.stopPrank();
 
         warpPastGrace();
 
         vm.prank(approver1);
-        estate.approveDistribution();
-        assertEq(estate.approvalCount(), 1);
+        multi.approveDistribution();
+        vm.prank(approver2);
+        multi.approveDistribution();
+
+        assertEq(multi.approvalCount(), 2);
+        assertTrue(multi.getApprover(1).approved);
+        assertTrue(multi.getApprover(2).approved);
+        assertEq(uint8(multi.getState()), uint8(Estate.EstateState.AwaitingApproval));
 
         vm.prank(ownerAddr);
-        vm.expectRevert(DistributionNotReady.selector);
-        estate.checkIn();
+        multi.checkIn();
+
+        assertEq(multi.approvalCount(), 0);
+        assertFalse(multi.getApprover(1).approved);
+        assertFalse(multi.getApprover(2).approved);
+        assertEq(uint8(multi.getState()), uint8(Estate.EstateState.Active));
+
+        // A later lapse starts from zero, not from the stale approvals.
+        warpPastGrace();
+        assertEq(uint8(multi.getState()), uint8(Estate.EstateState.AwaitingApproval));
+        assertEq(multi.approvalCount(), 0);
     }
 
     function test_GraceEndsAtAndHeartbeatExpiresAtMath() public view {
@@ -766,16 +804,24 @@ contract EstateApprovalRequiredDistributionTest is EstateTestBase {
         estate.approveDistribution();
     }
 
-    function test_StuckAwaitingApprovalForeverIfWindowExpiresWithoutQuorum() public {
+    // The window closing still strands the estate for BENEFICIARIES - nobody
+    // can approve, so it can never be distributed. But a living owner is no
+    // longer trapped alongside them: they can rebut and restore it.
+    function test_ApprovalWindowExpiryStrandsBeneficiariesButOwnerCanRecover() public {
         warpPastApprovalWindow();
 
-        // No recovery path: checkIn is blocked (grace already expired),
-        // approving is blocked (window expired) -> state is permanently stuck.
         assertEq(uint8(estate.getState()), uint8(Estate.EstateState.AwaitingApproval));
 
+        // Approvers can no longer act.
+        vm.prank(approver1);
+        vm.expectRevert(ApprovalWindowExpired.selector);
+        estate.approveDistribution();
+
+        // But the owner can bring it back to life.
         vm.prank(ownerAddr);
-        vm.expectRevert(DistributionNotReady.selector);
         estate.checkIn();
+
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
     }
 }
 

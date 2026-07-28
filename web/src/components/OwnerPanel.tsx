@@ -15,6 +15,7 @@ import {
 } from "../lib/estate";
 import type { Approver, Beneficiary } from "../lib/useEstate";
 import { useTx } from "../lib/useTx";
+import { useEstateLimits } from "../lib/useEstateLimits";
 import { AddressLink, Field, Notice, Panel, TxStatus } from "./Common";
 import { Confirm, Mono } from "./Confirm";
 
@@ -74,6 +75,8 @@ export function OwnerPanel({
           enters its distribution phase, its terms are locked.
         </Notice>
       )}
+
+      <TimingCard estate={estate} info={info} editable={editable} refetch={refetch} />
 
       <BeneficiariesCard
         estate={estate}
@@ -695,6 +698,173 @@ function FundingCard({
           })
         }
         onCancel={() => setReviewWithdraw(false)}
+      />
+    </Panel>
+  );
+}
+
+const DAY_SECONDS = 86_400;
+
+/// Editing the check-in interval and grace period.
+///
+/// Bounds come from the estate's own immutables, not the current factory —
+/// an estate created by an older factory may permit different ranges.
+function TimingCard({
+  estate,
+  info,
+  editable,
+  refetch,
+}: {
+  estate: `0x${string}`;
+  info: EstateInfo;
+  editable: boolean;
+  refetch: () => void;
+}) {
+  const { limits } = useEstateLimits(estate);
+
+  const currentHeartbeatDays = Math.round(
+    (Number(info.heartbeatEnds) - Number(info.lastCheckIn)) / DAY_SECONDS
+  );
+  const currentGraceDays = Math.round(
+    (Number(info.graceEnds) - Number(info.heartbeatEnds)) / DAY_SECONDS
+  );
+
+  const [heartbeat, setHeartbeat] = useState(String(currentHeartbeatDays));
+  const [grace, setGrace] = useState(String(currentGraceDays));
+  const [reviewing, setReviewing] = useState<"heartbeat" | "grace" | null>(null);
+
+  const hbTx = useTx(() => {
+    setReviewing(null);
+    refetch();
+  });
+  const grTx = useTx(() => {
+    setReviewing(null);
+    refetch();
+  });
+
+  const hb = Number(heartbeat);
+  const gr = Number(grace);
+
+  const hbInRange =
+    Number.isFinite(hb) && hb >= limits.minHeartbeatDays && hb <= limits.maxHeartbeatDays;
+  const grInRange = Number.isFinite(gr) && gr >= limits.minGraceDays && gr <= limits.maxGraceDays;
+
+  // Updating the interval restarts the clock, so the new deadline is always
+  // the full period from now.
+
+  const hbChanged = hbInRange && hb !== currentHeartbeatDays;
+  const grChanged = grInRange && gr !== currentGraceDays;
+
+  return (
+    <Panel
+      title="Timings"
+      hint="How long you can go without checking in, and how long you have to recover after missing one."
+    >
+      {!editable && (
+        <Notice tone="warn">
+          Timings are frozen — they can only be changed while the estate is
+          active. Check in to unfreeze them.
+        </Notice>
+      )}
+
+      <div className="row">
+        <Field
+          label="Check in every (days)"
+          range={`${limits.minHeartbeatDays}–${limits.maxHeartbeatDays} allowed · currently ${currentHeartbeatDays}`}
+          rangeBad={!hbInRange}
+          help={
+            hbChanged
+              ? `Saving this also counts as a check-in, so your next one would be due in ${hb} days.`
+              : "Saving a new interval also counts as a check-in — the clock restarts from that moment."
+          }
+        >
+          <input
+            type="number"
+            value={heartbeat}
+            min={limits.minHeartbeatDays}
+            max={limits.maxHeartbeatDays}
+            disabled={!editable}
+            onChange={(e) => setHeartbeat(e.target.value)}
+          />
+        </Field>
+
+        <Field
+          label="Grace period (days)"
+          range={`${limits.minGraceDays}–${limits.maxGraceDays} allowed · currently ${currentGraceDays}`}
+          rangeBad={!grInRange}
+          help="Time to recover after a missed check-in. Shortening this is always safe — it starts from your check-in deadline, never from today."
+        >
+          <input
+            type="number"
+            value={grace}
+            min={limits.minGraceDays}
+            max={limits.maxGraceDays}
+            disabled={!editable}
+            onChange={(e) => setGrace(e.target.value)}
+          />
+        </Field>
+      </div>
+
+      <TxStatus {...hbTx} />
+      <TxStatus {...grTx} />
+
+      <div className="actions">
+        <button
+          onClick={() => setReviewing("heartbeat")}
+          disabled={!editable || !hbChanged || hbTx.isPending || hbTx.isConfirming}
+        >
+          Update check-in interval
+        </button>
+        <button
+          className="secondary"
+          onClick={() => setReviewing("grace")}
+          disabled={!editable || !grChanged || grTx.isPending || grTx.isConfirming}
+        >
+          Update grace period
+        </button>
+      </div>
+
+      <Confirm
+        open={reviewing === "heartbeat"}
+        title="Change your check-in interval?"
+        intro="Saving this also counts as a check-in, so the new interval starts from now."
+        rows={[
+          { k: "Current", v: `${currentHeartbeatDays} days` },
+          { k: "New", v: `${hb} days` },
+          { k: "Next check-in due in", v: `${hb} days` },
+          { k: "Longest silence before release", v: `${hb + currentGraceDays} days` },
+        ]}
+        confirmLabel="Update interval"
+        onConfirm={() =>
+          hbTx.send({
+            address: estate,
+            abi: EstateAbi,
+            functionName: "updateHeartbeat",
+            args: [BigInt(hb) * BigInt(DAY_SECONDS)],
+          })
+        }
+        onCancel={() => setReviewing(null)}
+      />
+
+      <Confirm
+        open={reviewing === "grace"}
+        title="Change your grace period?"
+        intro="The window to recover your estate after missing a check-in."
+        rows={[
+          { k: "Current", v: `${currentGraceDays} days` },
+          { k: "New", v: `${gr} days` },
+          { k: "Longest silence before release", v: `${currentHeartbeatDays + gr} days` },
+        ]}
+        confirmLabel="Update grace period"
+        onConfirm={() =>
+          grTx.send({
+            address: estate,
+            abi: EstateAbi,
+            functionName: "updateGracePeriod",
+            args: [BigInt(gr) * BigInt(DAY_SECONDS)],
+          })
+        }
+        onCancel={() => setReviewing(null)}
       />
     </Panel>
   );
