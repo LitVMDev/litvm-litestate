@@ -439,6 +439,16 @@ contract Estate {
     // ------------------------------------------------------------
 
     function addApprover(address wallet) external onlyOwner onlyWhileActive {
+        // An Automatic estate has no use for approvers and never will: the mode
+        // is fixed at construction, requiredApprovals() is always 0, and
+        // getState() skips AwaitingApproval entirely, so approveDistribution()
+        // could never succeed for whoever was added. Refuse rather than take
+        // the owner's gas for a role that does nothing and reads, to both the
+        // owner and the person named, as though it does.
+        if (settings.mode != DistributionMode.ApprovalRequired) {
+            revert ApproversNotUsed();
+        }
+
         if (wallet == address(0)) {
             revert InvalidApprover();
         }

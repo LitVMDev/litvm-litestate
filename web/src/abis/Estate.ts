@@ -1037,6 +1037,11 @@ export const EstateAbi = [
   },
   {
     "type": "error",
+    "name": "ApproversNotUsed",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "DistributionNotReady",
     "inputs": []
   },

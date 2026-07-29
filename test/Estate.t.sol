@@ -724,6 +724,26 @@ contract EstateAutomaticDistributionTest is EstateTestBase {
         assertFalse(estate.canDistribute());
     }
 
+    function test_AddApproverRevertsOnAutomaticEstate() public {
+        // Mode is fixed at construction, so an approver added here could never
+        // approve anything: requiredApprovals() stays 0 and getState() skips
+        // AwaitingApproval, which is the only state approveDistribution()
+        // accepts. Refused outright rather than stored as a role that does
+        // nothing.
+        vm.prank(ownerAddr);
+        vm.expectRevert(ApproversNotUsed.selector);
+        estate.addApprover(approver1);
+
+        assertEq(estate.approverCount(), 0);
+    }
+
+    function test_AutomaticEstateIsFullyConfiguredWithNoApprovers() public view {
+        // The counterpart to the revert above: refusing approvers must not
+        // leave an Automatic estate unfundable.
+        assertTrue(estate.isFullyConfigured());
+        assertEq(estate.requiredApprovals(), 0);
+    }
+
     function test_CanDistributeFalseWhenVaultUnset() public {
         Estate unlinked = deployEstate(DistributionMode.Automatic, 0);
 
@@ -822,6 +842,79 @@ contract EstateApprovalRequiredDistributionTest is EstateTestBase {
         estate.checkIn();
 
         assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
+    }
+}
+
+/// An estate that requires approval but never had an approver added, and holds
+/// nothing. The clock runs anyway, so this is what "lapsing while half
+/// configured" actually does.
+contract EstateLapsedWithoutApproversTest is EstateTestBase {
+    Estate internal estate;
+    EstateVault internal vault;
+
+    function setUp() public {
+        (estate, vault) = deployEstateWithVault(DistributionMode.ApprovalRequired, 1);
+
+        vm.prank(ownerAddr);
+        estate.addBeneficiary(ben1, 10_000);
+    }
+
+    function test_LapsingLeavesItAwaitingAnApprovalNobodyCanGive() public {
+        warpPastGrace();
+
+        // getState() refuses to read "no approvers" as "approved by default".
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.AwaitingApproval));
+        assertFalse(estate.canDistribute());
+
+        // The approval window closing changes nothing: there was never anyone
+        // who could have acted within it.
+        warpPastApprovalWindow();
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.AwaitingApproval));
+        assertFalse(estate.canDistribute());
+    }
+
+    // The reason lapsing here costs nothing: the vault would not take a deposit
+    // in this configuration in the first place, so there is nothing to strand.
+    function test_NothingCouldHaveBeenDepositedIntoIt() public {
+        assertFalse(estate.isFullyConfigured());
+
+        vm.deal(ownerAddr, 1 ether);
+        vm.prank(ownerAddr);
+        (bool ok,) = address(vault).call{value: 1 ether}("");
+        assertFalse(ok);
+
+        warpPastApprovalWindow();
+
+        vm.prank(ownerAddr);
+        (bool stillRefused,) = address(vault).call{value: 1 ether}("");
+        assertFalse(stillRefused);
+        assertEq(vault.balance(), 0);
+    }
+
+    // The trap to know about: once lapsed, the estate cannot be repaired in
+    // place - every edit is gated on onlyWhileActive. Checking in is the way
+    // back, and it works at any point before a distribution is actually due.
+    function test_CannotAddApproversWhileLapsedButCheckInRestoresEverything() public {
+        warpPastApprovalWindow();
+
+        vm.prank(ownerAddr);
+        vm.expectRevert(HeartbeatExpired.selector);
+        estate.addApprover(approver1);
+
+        vm.prank(ownerAddr);
+        estate.checkIn();
+        assertEq(uint8(estate.getState()), uint8(Estate.EstateState.Active));
+
+        vm.prank(ownerAddr);
+        estate.addApprover(approver1);
+
+        assertTrue(estate.isFullyConfigured());
+
+        vm.deal(ownerAddr, 1 ether);
+        vm.prank(ownerAddr);
+        (bool ok,) = address(vault).call{value: 1 ether}("");
+        assertTrue(ok);
+        assertEq(vault.balance(), 1 ether);
     }
 }
 

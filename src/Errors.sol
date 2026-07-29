@@ -34,6 +34,7 @@ error ResiduaryBeneficiaryRequired();
 
 error InvalidApprover();
 error OwnerCannotApprove();
+error ApproversNotUsed();
 error DuplicateApprover();
 error AlreadyApproved();
 error ApprovalRequired();

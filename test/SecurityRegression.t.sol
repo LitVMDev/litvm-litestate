@@ -366,6 +366,76 @@ contract Regression_ResiduaryRequired is EstateTestBase {
         assertEq(estate.totalAllocatedBps(), 7000);
     }
 
+    // Reported route into a funded estate that could no longer take deposits:
+    // fully allocated, funded, drop the residuary, then drop a beneficiary.
+    // Clearing the residuary is legitimate at 100% - nothing is unallocated -
+    // so the guard has to hold on the *second* step, which is the one that
+    // creates the gap. Left open, this would leave a funded estate refusing
+    // deposits it should still accept.
+    function test_ClearingResiduaryAtFullAllocationStillBlocksTheNextRemoval() public {
+        (Estate estate, EstateVault vault) = deployEstateWithVault(DistributionMode.Automatic, 0);
+
+        vm.startPrank(ownerAddr);
+        estate.addBeneficiary(ben1, 6000);
+        estate.addBeneficiary(ben2, 4000);
+        estate.setResiduaryBeneficiary(residuary);
+        vm.stopPrank();
+
+        vm.deal(stranger, 10 ether);
+        vm.prank(stranger);
+        (bool ok,) = address(vault).call{value: 10 ether}("");
+        assertTrue(ok);
+
+        // Allowed: shares already total 100%, so nothing loses its destination.
+        vm.prank(ownerAddr);
+        estate.setResiduaryBeneficiary(address(0));
+
+        vm.prank(ownerAddr);
+        vm.expectRevert(ResiduaryBeneficiaryRequired.selector);
+        estate.removeBeneficiary(2);
+
+        // The estate is untouched by the refused edit and still fundable.
+        assertEq(estate.totalAllocatedBps(), 10_000);
+        assertTrue(estate.isFullyConfigured());
+
+        vm.deal(stranger, 1 ether);
+        vm.prank(stranger);
+        (bool stillOk,) = address(vault).call{value: 1 ether}("");
+        assertTrue(stillOk);
+    }
+
+    // The mirror image: withdrawal is never gated on configuration, so even an
+    // estate that has fallen out of a fundable shape cannot trap the balance.
+    // The only way in is a forced send (selfdestruct/coinbase), which bypasses
+    // the vault's receive() - vm.deal stands in for that here.
+    function test_OwnerCanWithdrawWhileEstateIsNotFullyConfigured() public {
+        (Estate estate, EstateVault vault) = deployEstateWithVault(DistributionMode.Automatic, 0);
+
+        vm.prank(ownerAddr);
+        estate.addBeneficiary(ben1, 5000);
+
+        assertFalse(estate.isFullyConfigured()); // 50% allocated, no residuary
+
+        vm.deal(address(vault), 5 ether);
+
+        vm.deal(stranger, 1 ether);
+        vm.prank(stranger);
+        (bool depositOk,) = address(vault).call{value: 1 ether}("");
+        assertFalse(depositOk); // deposits refused...
+
+        uint256 before = ownerAddr.balance;
+        vm.prank(ownerAddr);
+        vault.withdraw(5 ether); // ...withdrawal is not
+
+        assertEq(ownerAddr.balance - before, 5 ether);
+        assertEq(vault.balance(), 0);
+
+        // And the owner can always repair it back into a fundable shape.
+        vm.prank(ownerAddr);
+        estate.setResiduaryBeneficiary(residuary);
+        assertTrue(estate.isFullyConfigured());
+    }
+
     function test_CannotClearResiduaryWhileUnderAllocatedAndFunded() public {
         (Estate estate, EstateVault vault) = deployEstateWithVault(DistributionMode.Automatic, 0);
 
