@@ -307,7 +307,7 @@ function BeneficiariesCard({
                 </td>
                 {editable && (
                   <td className="num">
-                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    <div className="actions-cell" style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                       {editingId === b.id ? (
                         <>
                           <button
@@ -348,41 +348,6 @@ function BeneficiariesCard({
         </table>
       </div>
 
-      <div style={{ marginTop: 14, marginBottom: 8 }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            flexWrap: "wrap",
-            fontSize: 13,
-          }}
-        >
-          <span className="muted">
-            Residuary beneficiary — receives anything left unallocated:{" "}
-            <AddressLink address={info.residuaryBeneficiary} />
-          </span>
-          {editable && hasResiduary && (
-            <button
-              className="secondary"
-              onClick={() => setReviewClearResiduary(true)}
-              disabled={
-                Boolean(clearBlockedReason) ||
-                residuaryTx.isPending ||
-                residuaryTx.isConfirming
-              }
-              title={clearBlockedReason ?? undefined}
-            >
-              Remove
-            </button>
-          )}
-        </div>
-        {editable && hasResiduary && clearBlockedReason && (
-          <p className="help" style={{ color: "var(--urgent)", marginTop: 6 }}>
-            {clearBlockedReason}
-          </p>
-        )}
-      </div>
 
       {editing && editError && <Notice tone="error">{editError}</Notice>}
 
@@ -412,16 +377,6 @@ function BeneficiariesCard({
           are named in. It is at the top of this page.
         </Notice>
       )}
-
-      {remaining > 0 &&
-        info.residuaryBeneficiary === "0x0000000000000000000000000000000000000000" && (
-          <Notice tone="warn">
-            <strong>A residuary beneficiary is required.</strong> Shares total{" "}
-            {bpsToPercent(info.totalAllocatedBps)}, so {bpsToPercent(remaining)} has
-            no named destination. Name someone below, or allocate the full 100%
-            — the vault will not accept deposits until one of those is true.
-          </Notice>
-        )}
 
       {editable && (
         <>
@@ -470,52 +425,102 @@ function BeneficiariesCard({
             </button>
           </div>
 
-          <hr
-            style={{
-              border: 0,
-              borderTop: "1px solid var(--border)",
-              margin: "18px 0 14px",
-            }}
-          />
-
-          <TxStatus {...residuaryTx} />
-          <div className="field">
-            <label>Set residuary beneficiary</label>
-            <input
-              placeholder="0x…"
-              value={residuary}
-              onChange={(e) => setResiduary(e.target.value)}
-            />
-            {residuaryIsSelf && (
-              <div className="muted" style={{ fontSize: 12, marginTop: 4, color: "var(--urgent)" }}>
-                {SELF_WARNING}
-              </div>
-            )}
-            {clearingResiduaryBlocked && (
-              <div className="muted" style={{ fontSize: 12, marginTop: 4, color: "var(--urgent)" }}>
-                The residuary beneficiary cannot be cleared while shares total{" "}
-                {bpsToPercent(info.totalAllocatedBps)} and the vault holds funds —
-                the remainder would have nowhere to go.
-              </div>
-            )}
-          </div>
-          <div className="actions">
-            <button
-              className="secondary"
-              onClick={() => setReviewResiduary(true)}
-              disabled={
-                !isAddress(residuary) ||
-                residuaryIsSelf ||
-                clearingResiduaryBlocked ||
-                residuaryTx.isPending ||
-                residuaryTx.isConfirming
-              }
-            >
-              Review and set
-            </button>
-          </div>
         </>
       )}
+
+      <section className="subsection">
+        <h3>Residuary beneficiary</h3>
+        <p className="sub-hint">
+          Receives whatever share of the vault you have not allocated to anyone
+          above. Naming one is what lets your shares total less than 100%.
+        </p>
+
+        <div className={`current${hasResiduary ? "" : " unset"}`}>
+          <span className="who">
+            <span className="label">{hasResiduary ? "Nominated" : "Nobody nominated"}</span>
+            <span className="value">
+              {hasResiduary ? (
+                <AddressLink address={info.residuaryBeneficiary} />
+              ) : (
+                <span className="muted">Shares must total exactly 100%</span>
+              )}
+            </span>
+          </span>
+          <span className="amount">
+            <span className="n">{bpsToPercent(remaining)}</span>
+            <span className="cap">{hasResiduary ? "they receive" : "unallocated"}</span>
+          </span>
+        </div>
+
+        {remaining > 0 && !hasResiduary && (
+          <Notice tone="warn">
+            Shares total {bpsToPercent(info.totalAllocatedBps)}, so{" "}
+            {bpsToPercent(remaining)} has no destination. The vault will not
+            accept deposits until you nominate someone here or allocate the full
+            100%.
+          </Notice>
+        )}
+
+        {editable && (
+          <>
+            <TxStatus {...residuaryTx} />
+
+            <Field
+              label={hasResiduary ? "Replace with" : "Nominate someone"}
+              error={
+                residuaryIsSelf
+                  ? SELF_WARNING
+                  : clearingResiduaryBlocked
+                    ? "Use the Remove button below rather than entering an empty address."
+                    : undefined
+              }
+              help="Anyone except yourself. They can also be one of the beneficiaries above."
+            >
+              <input
+                placeholder="0x…"
+                value={residuary}
+                onChange={(e) => setResiduary(e.target.value)}
+              />
+            </Field>
+
+            <div className="actions">
+              <button
+                onClick={() => setReviewResiduary(true)}
+                disabled={
+                  !isAddress(residuary) ||
+                  residuaryIsSelf ||
+                  clearingResiduaryBlocked ||
+                  residuaryTx.isPending ||
+                  residuaryTx.isConfirming
+                }
+              >
+                {hasResiduary ? "Review and replace" : "Review and nominate"}
+              </button>
+
+              {hasResiduary && (
+                <button
+                  className="secondary"
+                  onClick={() => setReviewClearResiduary(true)}
+                  disabled={
+                    Boolean(clearBlockedReason) ||
+                    residuaryTx.isPending ||
+                    residuaryTx.isConfirming
+                  }
+                  title={clearBlockedReason ?? undefined}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+
+            {hasResiduary && clearBlockedReason && (
+              <p className="help" style={{ color: "var(--urgent)", marginTop: 8 }}>
+                {clearBlockedReason}
+              </p>
+            )}
+          </>
+        )}
+      </section>
 
       <Confirm
         open={reviewAdd}

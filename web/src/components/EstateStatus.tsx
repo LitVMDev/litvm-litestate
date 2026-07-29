@@ -80,8 +80,24 @@ export function EstateStatus({
         </div>
       </div>
 
+      <div className={`balance${!vaultBalance || vaultBalance === 0n ? " empty-vault" : ""}`}>
+        <div>
+          <span className="cap">Vault balance</span>
+          <span className="figure">
+            <span className="n">{formatZkLtc(vaultBalance)}</span>
+            <span className="unit">zkLTC</span>
+          </span>
+        </div>
+        <div className="aside">
+          {!vaultBalance || vaultBalance === 0n
+            ? "Nothing to distribute yet"
+            : distributed
+              ? "Set aside for beneficiaries to claim"
+              : `Shared out as ${bpsToPercent(info.totalAllocatedBps)} allocated shares`}
+        </div>
+      </div>
+
       <div className="stats">
-        <Stat k="Vault balance" v={`${formatZkLtc(vaultBalance)} zkLTC`} />
         {!hideDeadline && <Stat k={deadlineLabel} v={deadlineValue} />}
         <Stat k="Beneficiaries" v={info.beneficiaryCount} />
         <Stat

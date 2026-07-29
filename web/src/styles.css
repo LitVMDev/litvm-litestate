@@ -501,3 +501,112 @@ nav.site a[aria-current="page"] {
   color: var(--muted); margin-bottom: 5px;
 }
 .share .pair { margin-bottom: 12px; }
+
+/* ============================================================
+   Sub-section within a panel (e.g. the residuary beneficiary)
+   ============================================================ */
+
+.subsection {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: 16px 18px;
+  margin: 18px 0 4px;
+}
+.subsection > h3 {
+  font-size: 14px; margin: 0 0 4px; font-weight: 600;
+}
+.subsection > .sub-hint {
+  color: var(--muted); font-size: 13px; line-height: 1.55; margin: 0 0 14px;
+}
+.subsection .current {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;
+}
+.subsection .current .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.subsection .current .who .label {
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+}
+.subsection .current .who .value { font-size: 14px; }
+.subsection .current .amount {
+  text-align: right; font-variant-numeric: tabular-nums; flex: 0 0 auto;
+}
+.subsection .current .amount .n { font-size: 20px; font-weight: 600; display: block; }
+.subsection .current .amount .cap {
+  font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.subsection .current.unset { border-style: dashed; }
+
+/* ============================================================
+   Narrow screens
+   ============================================================ */
+
+@media (max-width: 560px) {
+  .wrap { padding: 20px 14px 60px; }
+  .panel, .subsection, .checkin, .share { padding: 16px 14px; }
+
+  /* Tables carry two actions per row; at this width they need the full
+     column rather than sitting side by side. */
+  table td, table th { padding: 8px 6px; }
+  table button { padding: 6px 10px; font-size: 13.5px; width: 100%; }
+  table td .actions-cell { flex-direction: column; align-items: stretch; gap: 6px; }
+
+  /* Long values (addresses, amounts) must scroll inside their own box rather
+     than widening the page. */
+  .cards { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+  .stat { padding: 10px 12px; }
+  .stat .v { font-size: 16px; }
+
+  .subsection .current { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .subsection .current .amount { text-align: left; }
+
+  .dialog { padding: 18px 16px; }
+  .summary-row { flex-direction: column; gap: 3px; }
+  .summary-row .v { text-align: left; }
+
+  .hero { padding: 28px 0 32px; }
+  .hero p.lede { font-size: 16px; }
+  .hero .cta { flex-direction: column; align-items: stretch; }
+  .hero .cta a { text-align: center; }
+
+  .actions { flex-direction: column; align-items: stretch; }
+  .actions button { width: 100%; }
+}
+
+/* The page must never scroll sideways, whatever a long address does. */
+body { overflow-x: hidden; }
+.addr, .mono { overflow-wrap: anywhere; }
+
+/* ============================================================
+   Vault balance — the number people actually look for
+   ============================================================ */
+
+.balance {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.balance .figure { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.balance .n {
+  font-size: clamp(26px, 5vw, 34px); font-weight: 600;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.balance .unit { font-size: 15px; color: var(--muted); font-weight: 500; }
+.balance .cap {
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); display: block; margin-bottom: 4px;
+}
+.balance .aside { text-align: right; font-size: 13px; color: var(--muted); }
+.balance.empty-vault { border-left-color: var(--warn); }
+@media (max-width: 560px) {
+  .balance { padding: 14px; }
+  .balance .aside { text-align: left; }
+}
