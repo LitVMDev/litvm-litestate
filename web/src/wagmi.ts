@@ -92,6 +92,11 @@ export const KNOWN_FACTORIES: { address: `0x${string}`; deployBlock: bigint; lab
     deployBlock: 34389907n,
     label: "v2",
   },
+  {
+    address: "0x12291bd36f614fcd3f48d7640fbc57ae57365531",
+    deployBlock: 34628822n,
+    label: "v3",
+  },
 ];
 
 /// Earliest block any estate could exist in.
