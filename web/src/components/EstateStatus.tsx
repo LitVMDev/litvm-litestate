@@ -1,8 +1,10 @@
 import {
+  DistributionMode,
   EstateState,
   STATE_LABEL,
   STATE_TONE,
   bpsToPercent,
+  describeConfigGap,
   formatZkLtc,
   timeUntil,
   type EstateInfo,
@@ -17,6 +19,7 @@ export function EstateStatus({
   vaultBalance,
   estate,
   vault,
+  mode,
   distributed,
   hideDeadline = false,
 }: {
@@ -24,6 +27,9 @@ export function EstateStatus({
   vaultBalance?: bigint;
   estate: `0x${string}`;
   vault?: `0x${string}`;
+  /// 0 = Automatic, 1 = ApprovalRequired. Lets the "cannot accept deposits"
+  /// notice name an approver shortfall, which is mode-dependent.
+  mode?: number;
   distributed?: boolean;
   /// Owners get the dedicated check-in card above this, which already shows
   /// the countdown - no need to print the same number twice.
@@ -118,9 +124,9 @@ export function EstateStatus({
 
       {!info.fullyConfigured && !distributed && (
         <Notice tone="warn">
-          <strong>This estate cannot accept deposits yet.</strong> It needs at
-          least one recipient, and — if it requires approval — enough approvers
-          to satisfy its rule. The vault rejects funds until both are true.
+          <strong>This estate cannot accept deposits.</strong>{" "}
+          {describeConfigGap(info, mode as DistributionMode | undefined) ??
+            "It needs at least one recipient, and — if it requires approval — enough approvers to satisfy its rule. The vault rejects funds until both are true."}
         </Notice>
       )}
 

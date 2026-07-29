@@ -1,6 +1,7 @@
 import { EstateAbi } from "../abis/Estate";
 import { EstateVaultAbi } from "../abis/EstateVault";
 import {
+  DistributionMode,
   EstateState,
   formatZkLtc,
   timeUntil,
@@ -18,12 +19,15 @@ export function ApproverPanel({
   estate,
   info,
   approvers,
+  mode,
   viewer,
   refetch,
 }: {
   estate: `0x${string}`;
   info: EstateInfo;
   approvers: Approver[];
+  /// 0 = Automatic, 1 = ApprovalRequired
+  mode?: number;
   viewer: `0x${string}`;
   refetch: () => void;
 }) {
@@ -44,20 +48,36 @@ export function ApproverPanel({
   const canApprove =
     state === EstateState.AwaitingApproval && !me.approved && windowLeft !== null;
 
+  // An estate created for automatic release never enters AwaitingApproval, so
+  // this wallet is listed as an approver but has nothing it can ever approve.
+  const automatic = mode === DistributionMode.Automatic;
+
   return (
     <Panel
       title="You are an approver"
-      hint="Your approval helps release this estate to its beneficiaries."
+      hint={
+        automatic
+          ? "This estate releases automatically, so there is nothing for you to approve."
+          : "Your approval helps release this estate to its beneficiaries."
+      }
     >
+      {automatic && (
+        <Notice>
+          The owner set this estate to release automatically. Once its check-in
+          deadline and grace period pass, anyone can trigger distribution — no
+          approvals are collected, so you will not be asked to act.
+        </Notice>
+      )}
+
       {me.approved && <Notice tone="ok">You have already approved.</Notice>}
 
-      {state === EstateState.Active && (
+      {!automatic && state === EstateState.Active && (
         <Notice>
           The owner is still checking in. There is nothing to approve yet.
         </Notice>
       )}
 
-      {state === EstateState.GracePeriod && (
+      {!automatic && state === EstateState.GracePeriod && (
         <Notice tone="warn">
           The owner has missed a check-in. Approval opens once the grace period
           ends.
@@ -80,16 +100,20 @@ export function ApproverPanel({
         </Notice>
       )}
 
-      <TxStatus {...tx} />
+      {!automatic && (
+        <>
+          <TxStatus {...tx} />
 
-      <div className="actions">
-        <button
-          onClick={() => setReviewing(true)}
-          disabled={!canApprove || tx.isPending || tx.isConfirming}
-        >
-          Approve distribution
-        </button>
-      </div>
+          <div className="actions">
+            <button
+              onClick={() => setReviewing(true)}
+              disabled={!canApprove || tx.isPending || tx.isConfirming}
+            >
+              Approve distribution
+            </button>
+          </div>
+        </>
+      )}
 
       <Confirm
         open={reviewing}

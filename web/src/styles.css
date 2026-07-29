@@ -93,6 +93,13 @@ body {
   font-size: 16px; line-height: 1; display: grid; place-items: center;
 }
 .account button.icon:hover { background: var(--panel-2); color: var(--text); }
+.account button.icon:disabled { opacity: .45; cursor: default; }
+.account button.icon:disabled:hover { background: transparent; color: var(--muted); }
+/* Teardown can take a few seconds over WalletConnect. Show that it is in
+   progress rather than leaving a pill that still reads as connected. */
+.account.leaving { opacity: .7; }
+.account.leaving .dot { background: var(--warn); }
+.account.leaving .mono { color: var(--muted); }
 
 @media (max-width: 680px) {
   .site-header-inner { flex-wrap: wrap; gap: 10px; row-gap: 8px; }

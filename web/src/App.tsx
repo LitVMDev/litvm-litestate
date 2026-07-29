@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isAddress } from "viem";
 import { useAccount, usePublicClient, useReadContract } from "wagmi";
 
@@ -18,7 +18,24 @@ import { resolveToEstate } from "./lib/resolve";
 import { href, useRoute } from "./lib/useRoute";
 import { shortAddress } from "./lib/estate";
 
-const LAST_ESTATE_KEY = "litestate.lastEstate";
+/// The last estate a wallet opened, remembered per wallet.
+///
+/// It used to be one shared key. Connecting a second wallet then inherited
+/// whatever the first had open, so a beneficiary landed straight on an estate
+/// they had never opened with that wallet and no explanation of where it came
+/// from — while a wallet with nothing remembered got the create-or-paste-an-
+/// address screen. Same app, two completely different first screens, decided
+/// by a key the user could not see.
+const LAST_ESTATE_PREFIX = "litestate.lastEstate";
+
+function lastEstateKey(wallet?: string): string {
+  return `${LAST_ESTATE_PREFIX}.${(wallet ?? "none").toLowerCase()}`;
+}
+
+function readLastEstate(wallet?: string): `0x${string}` | undefined {
+  const saved = localStorage.getItem(lastEstateKey(wallet));
+  return saved && isAddress(saved) ? (saved as `0x${string}`) : undefined;
+}
 
 export default function App() {
   const [route, navigate] = useRoute();
@@ -55,10 +72,9 @@ export default function App() {
 
 function AppView() {
   const { address, isConnected, chainId } = useAccount();
-  const [selected, setSelected] = useState<`0x${string}` | undefined>(() => {
-    const saved = localStorage.getItem(LAST_ESTATE_KEY);
-    return saved && isAddress(saved) ? (saved as `0x${string}`) : undefined;
-  });
+  const [selected, setSelected] = useState<`0x${string}` | undefined>(() =>
+    readLastEstate(address)
+  );
   const [tab, setTab] = useState<"manage" | "create">("manage");
   const [lookup, setLookup] = useState("");
   const [lookupBusy, setLookupBusy] = useState(false);
@@ -78,24 +94,43 @@ function AppView() {
 
   const myEstates = (mine.data ?? []) as readonly `0x${string}`[];
 
+  // Selection and its stored copy move together, so a switch of accounts can
+  // never write one wallet's estate under another's key.
+  const chooseEstate = useCallback(
+    (next?: `0x${string}`) => {
+      setSelected(next);
+
+      if (next) {
+        localStorage.setItem(lastEstateKey(address), next);
+      } else {
+        localStorage.removeItem(lastEstateKey(address));
+      }
+    },
+    [address]
+  );
+
+  // Switching wallets starts that wallet's own view, not the previous one's.
+  const shownFor = useRef(address);
+  useEffect(() => {
+    if (shownFor.current === address) return;
+    shownFor.current = address;
+    setSelected(readLastEstate(address));
+  }, [address]);
+
   useEffect(() => {
     if (!selected && myEstates.length > 0) {
-      setSelected(myEstates[myEstates.length - 1]);
+      chooseEstate(myEstates[myEstates.length - 1]);
     }
-  }, [myEstates, selected]);
+  }, [myEstates, selected, chooseEstate]);
 
   // After creating, land the user on the estate they just made rather than
   // leaving them on an empty form wondering whether it worked.
   useEffect(() => {
     if (!awaitingNew || myEstates.length === 0) return;
-    setSelected(myEstates[myEstates.length - 1]);
+    chooseEstate(myEstates[myEstates.length - 1]);
     setTab("manage");
     setAwaitingNew(false);
-  }, [awaitingNew, myEstates]);
-
-  useEffect(() => {
-    if (selected) localStorage.setItem(LAST_ESTATE_KEY, selected);
-  }, [selected]);
+  }, [awaitingNew, myEstates, chooseEstate]);
 
   const est = useEstate(selected, address);
 
@@ -151,7 +186,7 @@ function AppView() {
       if (found.kind === "vault") {
         setLookupNote("That was a vault address — opened the estate that owns it.");
       }
-      setSelected(found.estate);
+      chooseEstate(found.estate);
       setTab("manage");
       setLookup("");
     }
@@ -250,6 +285,25 @@ function AppView() {
 
       {tab === "manage" && !nothingToShow && (
         <>
+          {/* Someone with no estates of their own gets no estate picker, so
+              without this there is nothing on the page saying whose estate
+              they are looking at or how to get back to the start. */}
+          {selected && myEstates.length === 0 && est.owner && !isOwner && (
+            <Notice>
+              You are viewing an estate owned by{" "}
+              <span className="mono">{shortAddress(est.owner)}</span>, opened
+              with this wallet earlier. You can see its status, and act on it if
+              you are one of its beneficiaries or approvers.{" "}
+              <button
+                className="secondary"
+                style={{ marginTop: 8 }}
+                onClick={() => chooseEstate(undefined)}
+              >
+                Close it
+              </button>
+            </Notice>
+          )}
+
           <Panel>
             <div className="row">
               {myEstates.length > 0 && (
@@ -265,7 +319,7 @@ function AppView() {
                 >
                   <select
                     value={myEstates.includes(selected as `0x${string}`) ? selected : ""}
-                    onChange={(e) => setSelected(e.target.value as `0x${string}`)}
+                    onChange={(e) => chooseEstate(e.target.value as `0x${string}`)}
                   >
                     {!myEstates.includes(selected as `0x${string}`) && (
                       <option value="">
@@ -326,6 +380,7 @@ function AppView() {
                 vaultBalance={est.vaultBalance}
                 estate={selected}
                 vault={est.vault}
+                mode={est.settings?.[2]}
                 distributed={est.distributed}
                 hideDeadline={isOwner}
               />
@@ -349,6 +404,7 @@ function AppView() {
                   estate={selected}
                   info={est.info}
                   approvers={est.approvers}
+                  mode={est.settings?.[2]}
                   viewer={address}
                   refetch={est.refetch}
                 />

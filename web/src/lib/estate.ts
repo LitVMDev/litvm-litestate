@@ -92,6 +92,49 @@ export type EstateInfo = {
   fullyConfigured: boolean;
 };
 
+export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/// Why the vault is refusing deposits, phrased as the thing to go and fix.
+/// Mirrors Estate.isFullyConfigured(), in the same order, so the sentence
+/// names the condition the contract actually failed on - keep the two in step.
+///
+/// Returns null when the estate is fine, or when the gap depends on settings
+/// the caller has not loaded yet, so callers keep a generic fallback.
+export function describeConfigGap(
+  info: EstateInfo,
+  mode?: DistributionMode
+): string | null {
+  if (info.fullyConfigured) return null;
+
+  const hasResiduary = info.residuaryBeneficiary !== ZERO_ADDRESS;
+  const unallocated = BPS_TOTAL - Number(info.totalAllocatedBps);
+
+  if (info.beneficiaryCount === 0 && !hasResiduary) {
+    return "This estate has no recipients. Add a beneficiary, or name a residuary beneficiary to receive everything.";
+  }
+
+  if (unallocated > 0 && !hasResiduary) {
+    return `Shares total ${bpsToPercent(info.totalAllocatedBps)}, so ${bpsToPercent(
+      unallocated
+    )} has nowhere to go. Share out the rest between your beneficiaries, or name a residuary beneficiary to receive it.`;
+  }
+
+  if (mode === DistributionMode.ApprovalRequired) {
+    if (info.approverCount === 0) {
+      return "This estate requires approval before it can be released, but it has no approvers. Add at least one.";
+    }
+
+    if (info.approverCount < info.requiredApprovals) {
+      const short = info.requiredApprovals - info.approverCount;
+      return `This estate needs ${info.requiredApprovals} approvals but has ${info.approverCount} approver${
+        info.approverCount === 1 ? "" : "s"
+      }. Add ${short} more, or it could never be released.`;
+    }
+  }
+
+  return null;
+}
+
 export function bpsToPercent(bps: number | bigint): string {
   const n = Number(bps);
   const pct = n / 100;
@@ -166,6 +209,8 @@ const ERROR_HELP: Record<string, string> = {
   NothingToClaim: "This wallet has nothing to claim from this vault.",
   OwnerCannotApprove:
     "The estate owner cannot be one of its own approvers — approval only matters once they are no longer around.",
+  ApproversNotUsed:
+    "This estate was created to release automatically, so it does not use approvers. Release mode is fixed when the estate is created and cannot be changed.",
   ResiduaryBeneficiaryRequired:
     "Name a residuary beneficiary first. While shares total under 100%, someone must be nominated to receive the remainder.",
   InvalidLimits: "The limits configured for this factory are not coherent.",

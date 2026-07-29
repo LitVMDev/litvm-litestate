@@ -33,6 +33,14 @@ export function CheckIn({
     state === EstateState.GracePeriod ||
     state === EstateState.AwaitingApproval;
 
+  // An estate that requires approval but has no approvers waits for a decision
+  // nobody can make: getState() will not read "no approvers" as approval, so it
+  // sits here permanently. Saying "your approvers are deciding" would be plain
+  // untrue, and the way out — check in, then add them — is not guessable, since
+  // every edit is refused until the check-in lands.
+  const noApprovers =
+    state === EstateState.AwaitingApproval && info.approverCount === 0;
+
   // How much of the current interval has been used up.
   const start = Number(info.lastCheckIn);
   const due = Number(info.heartbeatEnds);
@@ -54,6 +62,10 @@ export function CheckIn({
   } else if (state === EstateState.GracePeriod) {
     headline = graceLeft ?? "Grace period over";
     sub = "left to check in before your estate is released";
+  } else if (state === EstateState.AwaitingApproval && noApprovers) {
+    headline = "Stuck — check in";
+    sub =
+      "This estate needs approval to be released but has no approvers, so nothing can happen to it either way";
   } else if (state === EstateState.AwaitingApproval) {
     headline = "Approval under way";
     sub = "Your approvers are deciding whether to release your estate — check in now to stop it";
@@ -119,7 +131,17 @@ export function CheckIn({
             your beneficiaries can claim and you will not be able to stop it.
           </>
         )}
-        {state === EstateState.AwaitingApproval && (
+        {state === EstateState.AwaitingApproval && noApprovers && (
+          <>
+            <strong>Nobody can release this estate and nobody can fund it.</strong>{" "}
+            It requires approval but has no approvers, and while the deadline is
+            past you cannot add any — every edit is refused until you check in.
+            Check in, add your approvers, and it works normally again. Nothing
+            has been lost: the vault refuses deposits in this state, so an
+            estate that lapses like this is always empty.
+          </>
+        )}
+        {state === EstateState.AwaitingApproval && !noApprovers && (
           <>
             <strong>You can still stop this.</strong> Checking in proves you are
             here, cancels any approvals already given, and returns your estate to

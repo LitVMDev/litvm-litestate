@@ -66,6 +66,12 @@ export function HowItWorks() {
         redirect it. Their only power is to say “yes, this should go ahead”, or
         to withhold that.
       </p>
+      <p>
+        Approvers only exist on estates set to require approval. That choice is
+        made when the estate is created and is permanent — an estate set to
+        release automatically cannot be given approvers later, and will not
+        accept them.
+      </p>
       <div className="warn-box">
         <strong>Approvers can block a release permanently.</strong>
         If you require approval and the approvers never give it within the

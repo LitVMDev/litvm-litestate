@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import { useAccount, useConnect, useSwitchChain } from "wagmi";
 import { liteforge } from "../wagmi";
 import { explainError, shortAddress } from "../lib/estate";
+import { useDisconnectWallet } from "../lib/useDisconnectWallet";
 
 /// A labelled input with an always-visible explanation. Descriptions are shown
 /// rather than hidden behind tooltips: most people setting this up have never
@@ -100,7 +101,7 @@ export function AddressLink({ address }: { address?: string }) {
 export function ConnectBar({ compact = false }: { compact?: boolean }) {
   const { address, isConnected, chainId } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
-  const { disconnect } = useDisconnect();
+  const { disconnectWallet, pending: disconnecting } = useDisconnectWallet();
   const { switchChain } = useSwitchChain();
 
   const wrongChain = isConnected && chainId !== liteforge.id;
@@ -165,7 +166,10 @@ export function ConnectBar({ compact = false }: { compact?: boolean }) {
 
   if (compact) {
     return (
-      <div className="account">
+      // The dot going amber and the address dimming is the whole feedback the
+      // pill can give in the space it has — without it, a slow WalletConnect
+      // teardown looks like a dead button.
+      <div className={`account${disconnecting ? " leaving" : ""}`}>
         {wrongChain ? (
           <button onClick={() => switchChain({ chainId: liteforge.id })}>
             Wrong network
@@ -173,10 +177,13 @@ export function ConnectBar({ compact = false }: { compact?: boolean }) {
         ) : (
           <>
             <span className="dot" aria-hidden="true" />
-            <span className="mono">{shortAddress(address)}</span>
+            <span className="mono">
+              {disconnecting ? "Disconnecting…" : shortAddress(address)}
+            </span>
             <button
               className="icon"
-              onClick={() => disconnect()}
+              onClick={() => void disconnectWallet()}
+              disabled={disconnecting}
               title="Disconnect"
               aria-label="Disconnect wallet"
             >
@@ -198,8 +205,12 @@ export function ConnectBar({ compact = false }: { compact?: boolean }) {
         <span className="badge ok">LiteForge</span>
       )}
       <span className="mono muted">{shortAddress(address)}</span>
-      <button className="secondary" onClick={() => disconnect()}>
-        Disconnect
+      <button
+        className="secondary"
+        onClick={() => void disconnectWallet()}
+        disabled={disconnecting}
+      >
+        {disconnecting ? "Disconnecting…" : "Disconnect"}
       </button>
     </div>
   );

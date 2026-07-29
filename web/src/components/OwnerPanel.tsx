@@ -5,10 +5,13 @@ import { useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 import { EstateAbi } from "../abis/Estate";
 import { EstateVaultAbi } from "../abis/EstateVault";
 import {
+  ApprovalRule,
   BPS_TOTAL,
+  DistributionMode,
   EstateState,
   MAX_APPROVERS,
   bpsToPercent,
+  describeConfigGap,
   explainError,
   formatZkLtc,
   type EstateInfo,
@@ -80,6 +83,17 @@ export function OwnerPanel({
           The check-in deadline has passed, so beneficiaries, approvers and
           timings can no longer be changed. This is deliberate: once the estate
           enters its distribution phase, its terms are locked.
+          {/* Freezing is not permanent until a release is actually due —
+              while the estate is only *asking* whether the owner is gone, a
+              check-in is the answer, and it restores editing. */}
+          {(state === EstateState.GracePeriod ||
+            state === EstateState.AwaitingApproval) && (
+            <>
+              {" "}
+              <strong>Checking in unlocks them again</strong> — it proves you are
+              still here, which is the only thing being asked.
+            </>
+          )}
         </Notice>
       )}
 
@@ -120,6 +134,7 @@ export function OwnerPanel({
           vault={vault}
           vaultBalance={vaultBalance}
           info={info}
+          mode={mode}
           distributed={distributed}
           refetch={refetch}
         />
@@ -700,21 +715,24 @@ function ApproversCard({
     isAddress(wallet) &&
     active.some((a) => a.wallet.toLowerCase() === wallet.toLowerCase());
 
+  // Release mode is fixed at construction, so an Automatic estate can never
+  // use approvers: requiredApprovals() stays 0 and getState() goes straight to
+  // ReadyForDistribution, which makes approveDistribution() always revert.
+  // Offering an add form here would sell a control that does nothing.
+  const automatic = mode === DistributionMode.Automatic;
+
   // The contract refuses a removal that leaves a quorum nobody could reach.
   // AnyOne and All track the live count so they only fail at zero; a fixed
   // Threshold fails as soon as the count drops below it.
-  const APPROVAL_REQUIRED = 1;
-  const RULE_THRESHOLD = 2;
-
   const removalBlockedReason = (): string | null => {
-    if (mode !== APPROVAL_REQUIRED) return null;
+    if (mode !== DistributionMode.ApprovalRequired) return null;
 
     const remaining = active.length - 1;
 
     if (remaining === 0) {
       return "This estate requires approval, so it must keep at least one approver. Add a replacement before removing this one.";
     }
-    if (policy && policy[0] === RULE_THRESHOLD && policy[1] > remaining) {
+    if (policy && policy[0] === ApprovalRule.Threshold && policy[1] > remaining) {
       return `This estate needs ${policy[1]} approvals, so it must keep at least ${policy[1]} approvers. Add a replacement before removing this one.`;
     }
     return null;
@@ -722,72 +740,106 @@ function ApproversCard({
 
   const removalBlocked = removalBlockedReason();
 
+  // Under the All rule the bar follows the live approver count, so the number
+  // on the confirmation has to be the one that will hold after this add - not
+  // today's requiredApprovals, which is still 0 while the list is empty.
+  const requiredAfterAdd =
+    policy && policy[0] === ApprovalRule.All
+      ? active.length + 1
+      : info.requiredApprovals;
+
+  const hint = automatic
+    ? "This estate releases automatically, so it does not use approvers."
+    : active.length === 0
+      ? "None yet. This estate requires approval, so it cannot be funded or released until you add one."
+      : `${active.length} active. This estate needs ${info.requiredApprovals} approval(s) to release.`;
+
   return (
-    <Panel
-      title="Approvers"
-      hint={`${active.length} active. This estate needs ${info.requiredApprovals} approval(s) to release.`}
-    >
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Wallet</th>
-              <th>Status</th>
-              {editable && <th />}
-            </tr>
-          </thead>
-          <tbody>
-            {active.length === 0 && (
+    <Panel title="Approvers" hint={hint}>
+      {automatic && (
+        <Notice>
+          <strong>You chose automatic release for this estate.</strong> Once the
+          check-in deadline and grace period pass, anyone can trigger
+          distribution and no approvals are collected. Release mode is fixed
+          when the estate is created, so approvers can never be given a say
+          here.
+        </Notice>
+      )}
+
+      {automatic && active.length > 0 && (
+        <Notice tone="warn">
+          The approvers below have no effect on this estate — they cannot
+          approve anything, and nothing waits on them. You can safely remove
+          them.
+        </Notice>
+      )}
+
+      {(!automatic || active.length > 0) && (
+        <div className="table-scroll">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={3} className="empty">
-                  No approvers yet.
-                </td>
+                <th>Wallet</th>
+                <th>Status</th>
+                {editable && <th />}
               </tr>
-            )}
-            {active.map((a) => (
-              <tr key={String(a.id)}>
-                <td>
-                  <AddressLink address={a.wallet} />
-                </td>
-                <td>
-                  {a.approved ? (
-                    <span className="badge ok">Approved</span>
-                  ) : (
-                    <span className="muted">Not yet</span>
-                  )}
-                </td>
-                {editable && (
-                  <td className="num">
-                    <button
-                      className="secondary"
-                      onClick={() => setRemoving(a)}
-                      disabled={Boolean(removalBlocked) || tx.isPending || tx.isConfirming}
-                      title={removalBlocked ?? undefined}
-                    >
-                      Remove
-                    </button>
+            </thead>
+            <tbody>
+              {active.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="empty">
+                    No approvers yet.
                   </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </tr>
+              )}
+              {active.map((a) => (
+                <tr key={String(a.id)}>
+                  <td>
+                    <AddressLink address={a.wallet} />
+                  </td>
+                  <td>
+                    {a.approved ? (
+                      <span className="badge ok">Approved</span>
+                    ) : (
+                      <span className="muted">Not yet</span>
+                    )}
+                  </td>
+                  {editable && (
+                    <td className="num">
+                      <button
+                        className="secondary"
+                        onClick={() => setRemoving(a)}
+                        disabled={Boolean(removalBlocked) || tx.isPending || tx.isConfirming}
+                        title={removalBlocked ?? undefined}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {editable && removalBlocked && (
         <Notice tone="warn">{removalBlocked}</Notice>
       )}
 
-      {active.length > 0 && (
+      {!automatic && active.length > 0 && (
         <Notice>
           <strong>Have you given each approver the estate address?</strong> They
           need it to approve when the time comes, and cannot find it themselves.
         </Notice>
       )}
 
-      {editable && (
+      {/* Also covers removing an inert approver from an Automatic estate,
+          where the add form below is not rendered at all. */}
+      {editable && <TxStatus {...tx} />}
+
+      {editable && !automatic && (
         <>
-          <TxStatus {...tx} />
           <div className="field" style={{ marginTop: 12 }}>
             <label>Approver wallet</label>
             <input
@@ -837,7 +889,7 @@ function ApproversCard({
         rows={[
           { k: "Wallet", v: <Mono>{wallet}</Mono> },
           { k: "Approvers after this", v: active.length + 1 },
-          { k: "Approvals needed to release", v: info.requiredApprovals },
+          { k: "Approvals needed to release", v: requiredAfterAdd },
         ]}
         acknowledge="I have checked this address, I trust this person to act when the time comes, and I will give them the estate address to keep."
         confirmLabel="Add approver"
@@ -885,12 +937,15 @@ function FundingCard({
   vault,
   vaultBalance,
   info,
+  mode,
   distributed,
   refetch,
 }: {
   vault: `0x${string}`;
   vaultBalance?: bigint;
   info: EstateInfo;
+  /// 0 = Automatic, 1 = ApprovalRequired
+  mode?: number;
   distributed?: boolean;
   refetch: () => void;
 }) {
@@ -930,7 +985,16 @@ function FundingCard({
     >
       {!info.fullyConfigured && (
         <Notice tone="warn">
-          The vault will reject deposits until the estate is fully configured.
+          <strong>The vault will reject deposits until this is fixed.</strong>{" "}
+          {describeConfigGap(info, mode as DistributionMode | undefined) ??
+            "The estate is not fully configured yet."}
+          {available > 0n && (
+            <>
+              {" "}
+              Anything already in the vault is unaffected — it stays yours to
+              withdraw, and will still be distributed if the estate is released.
+            </>
+          )}
         </Notice>
       )}
 
