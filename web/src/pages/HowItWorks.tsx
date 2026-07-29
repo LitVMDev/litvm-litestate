@@ -22,6 +22,7 @@ export function HowItWorks() {
           <li><a href="#funding">Funding and withdrawing</a></li>
           <li><a href="#claiming">Claiming</a></li>
           <li><a href="#locks">What locks, and when</a></li>
+          <li><a href="#privacy">What anyone can see</a></li>
           <li><a href="#wrong">How this can go wrong</a></li>
           <li><a href="#money">What the money actually is</a></li>
         </ul>
@@ -55,8 +56,10 @@ export function HowItWorks() {
       <h4>Beneficiaries</h4>
       <p>
         The people who inherit. Each is given a share as a percentage. They can
-        do nothing at all until the estate is released — they cannot see or
-        touch the funds before that, and they cannot trigger anything early.
+        do nothing at all until the estate is released — they cannot touch the
+        funds and cannot trigger anything early. They can, however, see: given
+        the address, a beneficiary can watch the balance and what their share
+        would currently be worth.
       </p>
 
       <h4>Approvers (optional)</h4>
@@ -236,8 +239,8 @@ export function HowItWorks() {
       <div className="warn-box">
         <strong>A beneficiary needs the estate address to claim.</strong>
         Either the estate or its vault address works — the app resolves both.
-        But it cannot be looked up or searched for, so the owner must hand it
-        over while they still can.
+        There is no directory to search, so the owner must hand it over while
+        they still can.
       </div>
       <p>
         After distribution, each beneficiary's share is set aside for them
@@ -278,6 +281,34 @@ export function HowItWorks() {
         to cover a holiday, a hospital stay, or a lost phone.
       </p>
 
+      <h3 id="privacy">What anyone can see</h3>
+      <p>
+        An estate is a contract on a public blockchain, so everything in it is
+        public. Anyone who has the address — not just beneficiaries and
+        approvers — can read the balance, every beneficiary's wallet and share,
+        who the approvers are, and every deposit, withdrawal and check-in you
+        have ever made. This app shows the same information to a stranger as to
+        a beneficiary, because hiding it in the interface would change nothing
+        about who can actually read it.
+      </p>
+      <p>
+        Naming someone is public too, and works in reverse:{" "}
+        <strong>
+          anyone holding a beneficiary's or approver's wallet address can find
+          the estates that name them
+        </strong>{" "}
+        without knowing the estate address, because those additions are recorded
+        as searchable events. If a wallet is publicly tied to a person, so is
+        their place in your estate.
+      </p>
+      <p>
+        What is <em>not</em> discoverable is the estate itself from nothing:
+        there is no directory, no search by name, and no notification. That is
+        findability, not privacy — plan on the basis that the contents are
+        readable by anyone who cares to look, and use wallets you are content to
+        have associated with each other.
+      </p>
+
       <h3 id="wrong">How this can go wrong</h3>
       <p>
         Being straightforward about the failure modes, because most of them
@@ -304,8 +335,7 @@ export function HowItWorks() {
         </li>
         <li>
           <strong>Beneficiaries must be given the estate address, and keep it.</strong>{" "}
-          Nothing notifies anyone, nothing links them to the estate on-chain
-          until it is distributed, and there is no way to search for it. If
+          Nothing notifies anyone, and there is no directory to search. If
           nobody has the address when you are gone, the funds stay where they
           are indefinitely. Store it alongside your will, with a solicitor, or
           anywhere your family will still look years from now.

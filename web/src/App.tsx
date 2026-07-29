@@ -280,9 +280,9 @@ function AppView() {
             </div>
 
             <p className="help" style={{ marginTop: 18 }}>
-              Do not have the address? There is no way to search for it — ask
-              whoever set the estate up. Nothing on-chain links you to an estate
-              until it is distributed.
+              Do not have the address? There is no directory to search — ask
+              whoever set the estate up. This app cannot open an estate you
+              cannot name.
             </p>
           </div>
         </Panel>

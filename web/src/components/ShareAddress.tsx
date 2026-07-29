@@ -4,11 +4,17 @@ import { Notice } from "./Common";
 /// The estate address is the only reliable way a beneficiary or approver can
 /// ever reach this estate.
 ///
-/// Nothing on-chain links them to it until distribution happens, and searching
-/// the chain for it is not viable: at ~0.25s per block this network produces
-/// ~126 million blocks a year, so a log scan that takes seconds today would
-/// take hours within a year and days within a decade. There is no index to
-/// query instead. So the address has to be recorded off-chain, by people, now.
+/// There is no index to query: nothing maps a beneficiary's wallet to the
+/// estates it appears in, and scanning for it does not stay viable — at ~0.2s
+/// per block this network produces ~150 million blocks a year, so a log scan
+/// that takes seconds today takes hours within a year. So the address has to be
+/// recorded off-chain, by people, now.
+///
+/// Note this is findability, not privacy, and the copy below must not blur the
+/// two. BeneficiaryAdded indexes the wallet, so anyone holding a beneficiary's
+/// address can pull back every estate that names them with a single filtered
+/// log query — verified against this chain. Everything else (balance, shares,
+/// the other beneficiaries) is readable by anyone who has the estate address.
 export function ShareAddress({
   estate,
   vault,
@@ -34,10 +40,15 @@ export function ShareAddress({
     <section className="share">
       <h2>Give this address to your beneficiaries</h2>
       <p>
-        This is the only way they can ever reach your estate. Nothing links them
-        to it on-chain until it is distributed, and there is no way to search for
-        it — if nobody has the address when you are gone, the funds stay where
-        they are indefinitely.
+        This is the only way they can ever reach your estate: there is no
+        directory and no way to look it up by name. If nobody has the address
+        when you are gone, the funds stay where they are indefinitely.
+      </p>
+      <p className="share-note">
+        It is not a secret, though. Anyone who has this address can see the
+        balance, who your beneficiaries are and what each one is left — and
+        anyone who knows a beneficiary's wallet address can find the estates
+        that name it. Choose addresses accordingly.
       </p>
 
       <div className="pair">
