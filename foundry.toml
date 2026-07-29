@@ -21,4 +21,13 @@ evm_version = "shanghai"
 [rpc_endpoints]
 litvm_testnet = "https://liteforge.rpc.caldera.xyz/http"
 
+# LitVM mainnet does not exist yet (reported for Q4 2026). When it does, add it
+# here and deploy with the *production* limits profile:
+#
+#   litvm_mainnet = "https://..."
+#   bin/deploy production --rpc litvm_mainnet --broadcast --ledger --sender 0x...
+#
+# Also re-check evm_version above against what the mainnet chain implements
+# before the first deploy - it is pinned, not detected.
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

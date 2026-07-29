@@ -1,0 +1,243 @@
+#!/bin/sh
+# Deploys an EstateFactory, and does the bookkeeping that is easy to forget
+# afterwards.
+#
+# TESTNET (LiteForge, chain 4441 — what you want 99% of the time)
+#
+#   bin/deploy                                    simulate, broadcast nothing
+#   bin/deploy --broadcast                        deploy with 1-day minimums
+#   bin/deploy production --broadcast             deploy with real-world limits
+#
+# MAINNET (does not exist yet — LitVM mainnet was reported for Q4 2026)
+#
+#   Before the first one: add `litvm_mainnet` to [rpc_endpoints] in
+#   foundry.toml, and import a mainnet-only keystore or use a hardware wallet.
+#
+#   bin/deploy production --rpc litvm_mainnet     simulate first, always
+#   bin/deploy production --rpc litvm_mainnet --broadcast \
+#       --ledger --sender 0xYOUR_LEDGER_ADDRESS
+#   bin/deploy production --rpc litvm_mainnet --broadcast \
+#       --account litvm-mainnet                   keystore instead of a Ledger
+#
+#   Use `production` limits on mainnet. The testnet profile allows a 1-day
+#   check-in interval, which is a trap for a real estate plan: one missed week
+#   on holiday and it starts releasing.
+#
+# Options:
+#   production | testnet   limits profile (default: testnet)
+#   --broadcast            send it. Without this, nothing leaves the machine.
+#   --rpc <alias|url>      default: litvm_testnet
+#   --account <name>       foundry keystore account (default: litvm-testnet)
+#   --ledger               sign on a Ledger instead; needs --sender
+#   --trezor               sign on a Trezor instead; needs --sender
+#   --sender <address>     the hardware wallet's address
+#   --skip-checks          skip bin/preflight (don't)
+#   --allow-dirty          deploy with uncommitted changes (don't)
+#
+# Simulating is the default because a factory is immutable and permanent: every
+# deploy adds an address that has to be carried in KNOWN_FACTORIES forever.
+set -e
+
+cd "$(git rev-parse --show-toplevel)"
+
+PROFILE=testnet
+RPC=litvm_testnet
+ACCOUNT=litvm-testnet
+HARDWARE=
+SENDER=
+BROADCAST=0
+SKIP_CHECKS=0
+ALLOW_DIRTY=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    testnet | production) PROFILE=$1 ;;
+    --broadcast) BROADCAST=1 ;;
+    --rpc)
+      RPC=$2
+      shift
+      ;;
+    --account)
+      ACCOUNT=$2
+      shift
+      ;;
+    --ledger) HARDWARE=--ledger ;;
+    --trezor) HARDWARE=--trezor ;;
+    --sender)
+      SENDER=$2
+      shift
+      ;;
+    --skip-checks) SKIP_CHECKS=1 ;;
+    --allow-dirty) ALLOW_DIRTY=1 ;;
+    -h | --help)
+      awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"
+      exit 0
+      ;;
+    *)
+      printf 'unknown option: %s (try --help)\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+bold=$(printf '\033[1m')
+green=$(printf '\033[32m')
+yellow=$(printf '\033[33m')
+off=$(printf '\033[0m')
+
+# A hardware wallet signs for an address forge cannot derive on its own, so the
+# address has to be stated. Catch it here rather than after the confirmation.
+if [ -n "$HARDWARE" ]; then
+  [ -n "$SENDER" ] || {
+    printf '%s needs --sender 0xYOUR_ADDRESS\n' "$HARDWARE" >&2
+    exit 2
+  }
+  SIGNER="$HARDWARE --sender $SENDER"
+  SIGNER_LABEL="$HARDWARE at $SENDER"
+else
+  SIGNER="--account $ACCOUNT"
+  SIGNER_LABEL="keystore account \"$ACCOUNT\""
+fi
+
+# The two scripts differ only in the limits they pass to the constructor.
+if [ "$PROFILE" = production ]; then
+  TARGET=DeployFactory
+  LIMITS="30-day minimum check-in, 7-day minimum grace and approval window"
+else
+  TARGET=DeployFactoryTestnet
+  LIMITS="1-day minimums, so a full lifecycle can be exercised in a day"
+fi
+
+# --- checks ------------------------------------------------------------------
+
+if [ "$SKIP_CHECKS" = 1 ]; then
+  printf '%sskipping preflight%s\n\n' "$yellow" "$off"
+elif [ "$ALLOW_DIRTY" = 1 ]; then
+  bin/preflight
+else
+  bin/preflight --deploy
+fi
+
+# --- chain -------------------------------------------------------------------
+
+printf '\n%schain%s\n' "$bold" "$off"
+CHAIN_ID=$(cast chain-id --rpc-url "$RPC") || {
+  printf '\nCould not reach "%s".\n' "$RPC" >&2
+  printf 'If that is an alias, it must exist under [rpc_endpoints] in foundry.toml.\n' >&2
+  printf 'Currently defined: %s\n' \
+    "$(awk '/^\[rpc_endpoints\]/{f=1;next} /^\[/{f=0} f && /=/ && $1 !~ /^#/ {print $1}' foundry.toml | tr '\n' ' ')" >&2
+  exit 1
+}
+BLOCK=$(cast block-number --rpc-url "$RPC")
+printf '  chain id     %s\n  block        %s\n' "$CHAIN_ID" "$BLOCK"
+
+# --- simulate ----------------------------------------------------------------
+
+printf '\n%ssimulating%s (against live chain state, broadcasts nothing)\n' "$bold" "$off"
+forge script "script/DeployFactory.s.sol:$TARGET" --rpc-url "$RPC"
+
+if [ "$BROADCAST" = 0 ]; then
+  printf '\n%sSimulation only.%s Re-run with --broadcast to deploy.\n' "$green" "$off"
+  exit 0
+fi
+
+# --- confirm -----------------------------------------------------------------
+
+printf '\n%s================ about to deploy ================%s\n' "$bold" "$off"
+printf '  profile      %s (%s)\n' "$PROFILE" "$LIMITS"
+printf '  script       %s\n' "$TARGET"
+printf '  chain        %s via %s\n' "$CHAIN_ID" "$RPC"
+printf '  signer       %s\n' "$SIGNER_LABEL"
+printf '  commit       %s\n' "$(git rev-parse --short HEAD)"
+printf '%s================================================%s\n\n' "$bold" "$off"
+printf 'A factory is immutable and can never be removed from KNOWN_FACTORIES.\n'
+
+# A production deploy should not share its muscle memory with a testnet one.
+if [ "$PROFILE" = production ]; then
+  PHRASE="deploy production"
+else
+  PHRASE="deploy"
+fi
+
+printf 'Type %s%s%s to continue: ' "$bold" "$PHRASE" "$off"
+read -r answer
+[ "$answer" = "$PHRASE" ] || {
+  printf 'Aborted.\n'
+  exit 1
+}
+
+# --- broadcast ---------------------------------------------------------------
+
+# shellcheck disable=SC2086 # $SIGNER is two or three deliberate arguments
+forge script "script/DeployFactory.s.sol:$TARGET" \
+  --rpc-url "$RPC" --broadcast $SIGNER
+
+# --- what got deployed -------------------------------------------------------
+
+RUN=broadcast/DeployFactory.s.sol/$CHAIN_ID/run-latest.json
+[ -f "$RUN" ] || {
+  printf '\nDeployed, but %s is missing — read the address from the log above.\n' "$RUN"
+  exit 1
+}
+
+# node rather than jq: the repo already depends on node for the ABI generator,
+# and jq is not guaranteed to be installed.
+DEPLOYED=$(node -e '
+  const run = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const tx = run.transactions.find(
+    (t) => t.transactionType === "CREATE" && t.contractName === "EstateFactory"
+  );
+  if (!tx) { console.error("no EstateFactory CREATE in " + process.argv[1]); process.exit(1); }
+  const receipt = (run.receipts || []).find((r) => r.transactionHash === tx.hash);
+  const block = receipt ? Number(receipt.blockNumber) : "";
+  console.log([tx.contractAddress, block, tx.hash].join(" "));
+' "$RUN")
+
+ADDRESS=$(echo "$DEPLOYED" | cut -d' ' -f1)
+DEPLOY_BLOCK=$(echo "$DEPLOYED" | cut -d' ' -f2)
+TX=$(echo "$DEPLOYED" | cut -d' ' -f3)
+
+printf '\n%s================ deployed ================%s\n' "$green" "$off"
+printf '  EstateFactory  %s\n' "$ADDRESS"
+printf '  block          %s\n' "$DEPLOY_BLOCK"
+printf '  tx             %s\n' "$TX"
+printf '%s==========================================%s\n' "$green" "$off"
+
+# --- the three things that are easy to forget --------------------------------
+
+ENV_FILE=web/.env.local
+printf '\nUpdate %s to point the local app at it? [y/N] ' "$ENV_FILE"
+read -r answer
+if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
+  touch "$ENV_FILE"
+  # Replace the line if present, append if not, without disturbing the rest.
+  if grep -q '^VITE_FACTORY_ADDRESS=' "$ENV_FILE"; then
+    tmp=$(mktemp)
+    sed "s|^VITE_FACTORY_ADDRESS=.*|VITE_FACTORY_ADDRESS=$ADDRESS|" "$ENV_FILE" >"$tmp"
+    mv "$tmp" "$ENV_FILE"
+  else
+    printf 'VITE_FACTORY_ADDRESS=%s\n' "$ADDRESS" >>"$ENV_FILE"
+  fi
+  printf '%s  updated%s %s\n' "$green" "$off" "$ENV_FILE"
+else
+  printf '  skipped — set VITE_FACTORY_ADDRESS=%s in %s yourself\n' "$ADDRESS" "$ENV_FILE"
+fi
+
+# Deliberately not automated: KNOWN_FACTORIES must only ever be appended to,
+# and an edit that silently replaced an entry would orphan every estate created
+# by the old factory. Printing it keeps a human in that decision.
+printf '\n%sStill to do%s\n' "$bold" "$off"
+printf '\n1. Append to KNOWN_FACTORIES in web/src/wagmi.ts (never remove an entry):\n\n'
+cat <<SNIPPET
+  {
+    address: "$ADDRESS",
+    deployBlock: ${DEPLOY_BLOCK}n,
+    label: "vNEXT",
+  },
+SNIPPET
+printf '\n2. GitHub → Settings → Secrets and variables → Actions → Variables →\n'
+printf '   VITE_FACTORY_ADDRESS = %s, then re-run the "Deploy web" workflow.\n' "$ADDRESS"
+printf '\n3. Update the deployment table in DEV.md.\n'
+printf '\nThen verify it answers:\n'
+printf '   cast call %s "totalEstates()(uint256)" --rpc-url %s\n' "$ADDRESS" "$RPC"
