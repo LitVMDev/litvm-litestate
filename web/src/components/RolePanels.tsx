@@ -1,17 +1,19 @@
 import { EstateAbi } from "../abis/Estate";
 import { EstateVaultAbi } from "../abis/EstateVault";
 import {
+  BPS_TOTAL,
   DistributionMode,
   EstateState,
+  bpsToPercent,
   formatZkLtc,
   timeUntil,
   type EstateInfo,
 } from "../lib/estate";
 import { useNow } from "../lib/useEstate";
-import type { Approver } from "../lib/useEstate";
+import type { Approver, Beneficiary } from "../lib/useEstate";
 import { useTx } from "../lib/useTx";
 import { useState } from "react";
-import { Notice, Panel, TxStatus } from "./Common";
+import { Notice, Panel, Stat, TxStatus } from "./Common";
 import { Confirm } from "./Confirm";
 
 /// Shown to a connected wallet that is an active approver on this estate.
@@ -139,6 +141,111 @@ export function ApproverPanel({
         }
         onCancel={() => setReviewing(false)}
       />
+    </Panel>
+  );
+}
+
+/// What a named beneficiary — or the residuary beneficiary — would receive if
+/// the estate were released right now.
+///
+/// Shown before distribution only; afterwards the amount is real and settled,
+/// and BeneficiaryPanel takes over with a claim button.
+///
+/// The figure is deliberately framed as an illustration rather than an
+/// entitlement. Every input to it can still change: the owner may re-cut the
+/// shares, remove a beneficiary outright, or empty the vault, all without
+/// anyone's permission, right up until the moment of release. Presenting it as
+/// "your inheritance" would be a promise this contract does not make.
+export function YourShare({
+  info,
+  beneficiaries,
+  vaultBalance,
+  viewer,
+  distributed,
+}: {
+  info: EstateInfo;
+  beneficiaries: readonly Beneficiary[];
+  vaultBalance?: bigint;
+  viewer?: `0x${string}`;
+  distributed?: boolean;
+}) {
+  if (!viewer || distributed) return null;
+
+  const me = viewer.toLowerCase();
+  const named = beneficiaries.find((b) => b.active && b.wallet.toLowerCase() === me);
+  const isResiduary = info.residuaryBeneficiary.toLowerCase() === me;
+
+  if (!named && !isResiduary) return null;
+
+  // The residuary beneficiary takes whatever the named shares do not cover, so
+  // someone can hold both a fixed share and the remainder.
+  const namedBps = named?.shareBps ?? 0;
+  const residuaryBps = isResiduary ? BPS_TOTAL - Number(info.totalAllocatedBps) : 0;
+  const totalBps = namedBps + residuaryBps;
+
+  const balance = vaultBalance ?? 0n;
+
+  // Same integer maths the vault uses in distribute(), so the illustration
+  // cannot read higher than what would actually be set aside.
+  const worth = (balance * BigInt(totalBps)) / BigInt(BPS_TOTAL);
+
+  const state = info.state as EstateState;
+
+  return (
+    <Panel
+      title="Your share of this estate"
+      hint="An illustration of where things stand today — not an amount set aside for you."
+    >
+      <div className="stats">
+        <Stat k="Your share" v={bpsToPercent(totalBps)} />
+        <Stat k="Worth right now" v={`${formatZkLtc(worth)} zkLTC`} />
+        <Stat k="Vault holds" v={`${formatZkLtc(balance)} zkLTC`} />
+      </div>
+
+      {named && isResiduary && residuaryBps > 0 && (
+        <Notice>
+          That is {bpsToPercent(namedBps)} as a named beneficiary plus the{" "}
+          {bpsToPercent(residuaryBps)} left unallocated, which comes to you as
+          the residuary beneficiary.
+        </Notice>
+      )}
+
+      {!named && isResiduary && (
+        <Notice>
+          You are the residuary beneficiary: you receive whatever is not
+          allocated to a named share — {bpsToPercent(residuaryBps)} of the vault
+          as it stands.
+        </Notice>
+      )}
+
+      {balance === 0n && (
+        <Notice tone="warn">
+          The vault is empty at the moment, so this share is currently worth
+          nothing. That can change at any time — the owner can pay in and
+          withdraw freely until the estate is released.
+        </Notice>
+      )}
+
+      <Notice tone="warn">
+        <strong>Nothing here is yours yet, and none of it is fixed.</strong> Your
+        share is a percentage of whatever the vault holds at the moment of
+        release, not a fixed amount, so this figure moves with the balance.{" "}
+        {state === EstateState.Active ? (
+          <>
+            Until release the owner can also re-cut the shares, remove you
+            outright, or withdraw the funds entirely, without needing anyone's
+            agreement.
+          </>
+        ) : (
+          <>
+            The terms are now frozen — shares and beneficiaries can no longer be
+            edited — but the owner can still withdraw the vault's funds until a
+            distribution actually happens, and a single check-in from them
+            unfreezes everything again.
+          </>
+        )}{" "}
+        Treat it as an indication only.
+      </Notice>
     </Panel>
   );
 }

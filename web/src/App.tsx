@@ -9,7 +9,12 @@ import { SiteHeader } from "./components/SiteHeader";
 import { CreateEstate } from "./components/CreateEstate";
 import { EstateStatus } from "./components/EstateStatus";
 import { OwnerPanel } from "./components/OwnerPanel";
-import { ApproverPanel, BeneficiaryPanel, DistributePanel } from "./components/RolePanels";
+import {
+  ApproverPanel,
+  BeneficiaryPanel,
+  DistributePanel,
+  YourShare,
+} from "./components/RolePanels";
 import { CheckIn } from "./components/CheckIn";
 import { Landing } from "./pages/Landing";
 import { HowItWorks } from "./pages/HowItWorks";
@@ -389,6 +394,14 @@ function AppView() {
                 vault={est.vault}
                 myClaimable={est.myClaimable}
                 refetch={est.refetch}
+              />
+
+              <YourShare
+                info={est.info}
+                beneficiaries={est.beneficiaries}
+                vaultBalance={est.vaultBalance}
+                viewer={address}
+                distributed={est.distributed}
               />
 
               <DistributePanel
