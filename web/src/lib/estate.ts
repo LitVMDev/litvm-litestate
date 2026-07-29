@@ -216,6 +216,22 @@ const ERROR_HELP: Record<string, string> = {
   InvalidLimits: "The limits configured for this factory are not coherent.",
 };
 
+/// A call that comes back with no data at all. The usual cause here is timing:
+/// the contract was created seconds ago and the node answering this wallet has
+/// not caught up with it yet, so from where it is standing the address holds no
+/// code. Retrying works, which is exactly what makes it confusing — it looks
+/// like a contract that rejected you rather than a node that had not heard of
+/// it.
+const NO_DATA =
+  "The network returned nothing for that call. If the estate or factory was " +
+  "created moments ago, the node your wallet is using has probably not caught " +
+  "up with it yet — wait a few seconds and try again. If it keeps happening, " +
+  "check your wallet is on LiteForge.";
+
+/// Lines viem appends for debugging. Useful in a console, noise in a notice.
+const BOILERPLATE =
+  /^(Contract Call|Request Arguments|Raw Call Arguments|Estimate Gas Arguments|Docs:|Version:|URL:|Details:|This could be due to)/;
+
 export function explainError(err: unknown): string {
   const raw =
     err && typeof err === "object" && "message" in err
@@ -230,6 +246,31 @@ export function explainError(err: unknown): string {
     if (raw.includes(name)) return help;
   }
 
-  const firstLine = raw.split("\n")[0] ?? raw;
-  return firstLine.length > 200 ? `${firstLine.slice(0, 200)}…` : firstLine;
+  if (/returned no data|reverted with the following reason:\s*$/i.test(raw)) {
+    return NO_DATA;
+  }
+
+  // viem writes multi-line errors where line 1 is a header ("The contract
+  // function "createEstate" reverted with the following reason:") and the part
+  // that says what actually happened is on the line after it. Returning only
+  // the first line printed the header and threw the reason away — which is how
+  // a real failure once reached a user as "reverted with reason:" and nothing
+  // else at all.
+  const lines: string[] = [];
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (BOILERPLATE.test(trimmed)) break;
+    lines.push(trimmed);
+    if (lines.length === 3) break;
+  }
+
+  const message = lines.join(" ") || raw;
+
+  // A header with nothing after it means the revert carried no data.
+  if (/reverted( with the following (reason|signature))?:?$/i.test(message)) {
+    return NO_DATA;
+  }
+
+  return message.length > 220 ? `${message.slice(0, 220)}…` : message;
 }
