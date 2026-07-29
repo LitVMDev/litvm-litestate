@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { parseEther, isAddress } from "viem";
-import { useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
+import { usePublicClient, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
 
 import { EstateAbi } from "../abis/Estate";
 import { EstateVaultAbi } from "../abis/EstateVault";
@@ -17,6 +17,7 @@ import {
   type EstateInfo,
 } from "../lib/estate";
 import type { Approver, Beneficiary } from "../lib/useEstate";
+import { feeOverrides } from "../lib/fees";
 import { useTx } from "../lib/useTx";
 import { useEstateLimits } from "../lib/useEstateLimits";
 import { AddressLink, Field, Notice, Panel, TxStatus } from "./Common";
@@ -967,6 +968,7 @@ function FundingCard({
     isPending: depositPending,
     error: depositError,
   } = useSendTransaction();
+  const publicClient = usePublicClient();
   const { isLoading: depositConfirming, isSuccess: depositDone } =
     useWaitForTransactionReceipt({ hash: depositHash });
 
@@ -1050,7 +1052,16 @@ function FundingCard({
 
       <div className="actions">
         <button
-          onClick={() => depositWei !== null && sendTransaction({ to: vault, value: depositWei })}
+          onClick={async () =>
+            depositWei !== null &&
+            // Same fee caps as every other write — a deposit is a plain
+            // transfer, so it hits the same base-fee race. See lib/fees.ts.
+            sendTransaction({
+              to: vault,
+              value: depositWei,
+              ...(await feeOverrides(publicClient)),
+            })
+          }
           disabled={
             !depositValid ||
             !info.fullyConfigured ||

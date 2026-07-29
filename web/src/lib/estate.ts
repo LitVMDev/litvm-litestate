@@ -216,6 +216,23 @@ const ERROR_HELP: Record<string, string> = {
   InvalidLimits: "The limits configured for this factory are not coherent.",
 };
 
+/// Node-level rejections, which never reach the contract and so have no error
+/// name to match on. Keyed by a phrase from the RPC's own message.
+const RPC_HELP: [RegExp, string][] = [
+  [
+    /max fee per gas less than block base fee/i,
+    "Your wallet offered less for gas than the network is currently charging. This chain's suggested gas price drifts below its own base fee, so wallets guess low — try again, and it should go through.",
+  ],
+  [
+    /insufficient funds/i,
+    "This wallet does not hold enough zkLTC to cover the transaction. Top it up from the faucet and try again.",
+  ],
+  [
+    /nonce too low|already known|replacement transaction underpriced/i,
+    "Your wallet sent a transaction that clashes with one already in flight. Wait for the pending one to confirm, or reset the account in your wallet's advanced settings.",
+  ],
+];
+
 /// A call that comes back with no data at all. The usual cause here is timing:
 /// the contract was created seconds ago and the node answering this wallet has
 /// not caught up with it yet, so from where it is standing the address holds no
@@ -244,6 +261,13 @@ export function explainError(err: unknown): string {
 
   for (const [name, help] of Object.entries(ERROR_HELP)) {
     if (raw.includes(name)) return help;
+  }
+
+  // Checked after contract errors, before the generic handling: these arrive
+  // wrapped in the same "reverted with the following reason" envelope as a real
+  // revert, even though the transaction never reached the contract.
+  for (const [pattern, help] of RPC_HELP) {
+    if (pattern.test(raw)) return help;
   }
 
   if (/returned no data|reverted with the following reason:\s*$/i.test(raw)) {
