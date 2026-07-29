@@ -9,10 +9,19 @@ import type { PublicClient } from "viem";
 /// rejects the transaction with "max fee per gas less than block base fee", and
 /// the identical action succeeds when pressed again a few seconds later.
 ///
-/// EIP-1559 charges base + priority and refunds the difference, so a cap well
-/// above the going rate costs nothing — the only thing it buys is not losing a
-/// coin toss against the next block.
-const BASE_FEE_HEADROOM = 4n;
+/// EIP-1559 charges base + priority and refunds the difference, so raising the
+/// cap costs nothing at settlement. It is not free of consequence, though:
+/// MetaMask compares the cap against its own suggestion and warns about a fee
+/// "higher than the network suggests", which is precisely the wrong thing for
+/// an app asking to be trusted with an inheritance.
+///
+/// 2x is the long-standing EIP-1559 recommendation (2 * baseFee + tip) and sits
+/// where wallets expect it, so it does not trip that warning. It is also ample
+/// here: the shortfall that started this was 0.2%, per-block movement is about
+/// 1%, and the drift measured across several minutes was under 15% — which
+/// matters because this app deliberately puts a confirmation dialog in front of
+/// every action, so the base fee keeps moving while it is read.
+const BASE_FEE_HEADROOM = 2n;
 
 export type FeeOverrides = {
   maxFeePerGas?: bigint;
