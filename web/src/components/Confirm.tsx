@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
+import { FeeNote } from "./Common";
+
 export type SummaryRow = { k: string; v: ReactNode };
 
 /// A review step shown before anything is signed. Every write in this app goes
@@ -78,6 +80,10 @@ export function Confirm({
             <span>{acknowledge}</span>
           </label>
         )}
+
+        {/* The last thing read before the wallet opens, which is where the
+            ceiling and any fee warning will appear. */}
+        <FeeNote />
 
         <div className="dialog-actions">
           <button className="secondary" onClick={onCancel}>

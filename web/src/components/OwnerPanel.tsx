@@ -20,7 +20,7 @@ import type { Approver, Beneficiary } from "../lib/useEstate";
 import { feeOverrides } from "../lib/fees";
 import { useTx } from "../lib/useTx";
 import { useEstateLimits } from "../lib/useEstateLimits";
-import { AddressLink, Field, Notice, Panel, TxStatus } from "./Common";
+import { AddressLink, FeeNote, Field, Notice, Panel, TxStatus } from "./Common";
 import { ShareAddress } from "./ShareAddress";
 import { Confirm, Mono } from "./Confirm";
 
@@ -1046,7 +1046,12 @@ function FundingCard({
       </div>
 
       {depositError && <Notice tone="error">{explainError(depositError)}</Notice>}
-      {depositPending && <Notice>Confirm the deposit in your wallet…</Notice>}
+      {depositPending && (
+        <Notice>
+          Confirm the deposit in your wallet…
+          <FeeNote />
+        </Notice>
+      )}
       {depositConfirming && <Notice>Waiting for confirmation…</Notice>}
       <TxStatus {...withdrawTx} />
 

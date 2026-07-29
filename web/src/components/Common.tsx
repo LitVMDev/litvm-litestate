@@ -240,6 +240,26 @@ export function SwitchToLiteForge() {
 }
 
 /// Wraps a write action: shows pending/confirming state and decoded errors.
+/// Said before the wallet says it, not after.
+///
+/// Wallets display maxFeePerGas — the ceiling — and reserve that much against
+/// the balance, then charge base + priority. This app sets the ceiling itself,
+/// well above the network's own estimate, because that estimate is too low to
+/// get transactions accepted here (see lib/fees.ts). Two consequences land on
+/// the user: the number shown is roughly double what they pay, and MetaMask may
+/// warn that the fee exceeds its suggestion. Someone deciding whether to trust
+/// this app with an inheritance should hear that from us first.
+export function FeeNote() {
+  return (
+    <p className="fee-note">
+      The fee your wallet shows is a <strong>ceiling, not a price</strong> — we
+      set it above this network's own estimate, which is too low to get
+      transactions accepted. You are charged the going rate, typically about
+      half the figure displayed.
+    </p>
+  );
+}
+
 export function TxStatus({
   isPending,
   isConfirming,
@@ -252,7 +272,13 @@ export function TxStatus({
   error: string | null;
 }) {
   if (error) return <Notice tone="error">{error}</Notice>;
-  if (isPending) return <Notice>Confirm in your wallet…</Notice>;
+  if (isPending)
+    return (
+      <Notice>
+        Confirm in your wallet…
+        <FeeNote />
+      </Notice>
+    );
   if (isConfirming) return <Notice>Waiting for confirmation…</Notice>;
   if (isSuccess) return <Notice tone="ok">Done.</Notice>;
   return null;

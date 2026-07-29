@@ -9,8 +9,12 @@ import type { PublicClient } from "viem";
 /// rejects the transaction with "max fee per gas less than block base fee", and
 /// the identical action succeeds when pressed again a few seconds later.
 ///
-/// EIP-1559 charges base + priority and refunds the difference, so raising the
-/// cap costs nothing at settlement. It is not free of consequence, though:
+/// The cap decides only whether a transaction can be included, never what it
+/// costs: the charge is gasUsed * min(maxFeePerGas, baseFee + priority), and
+/// the difference is not refunded so much as never taken. Measured on this
+/// chain's own v3 factory deploy — cap 20,362,001, charged 10,125,000, exactly
+/// half. So raising the cap costs nothing at settlement. It is not free of
+/// consequence, though:
 /// MetaMask compares the cap against its own suggestion and warns about a fee
 /// higher than the network suggests, which is precisely the wrong thing for an
 /// app asking to be trusted with an inheritance. So take the smallest cap the
