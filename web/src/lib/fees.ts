@@ -12,16 +12,32 @@ import type { PublicClient } from "viem";
 /// EIP-1559 charges base + priority and refunds the difference, so raising the
 /// cap costs nothing at settlement. It is not free of consequence, though:
 /// MetaMask compares the cap against its own suggestion and warns about a fee
-/// "higher than the network suggests", which is precisely the wrong thing for
-/// an app asking to be trusted with an inheritance.
+/// higher than the network suggests, which is precisely the wrong thing for an
+/// app asking to be trusted with an inheritance. So take the smallest cap the
+/// chain's own behaviour justifies rather than a round number.
 ///
-/// 2x is the long-standing EIP-1559 recommendation (2 * baseFee + tip) and sits
-/// where wallets expect it, so it does not trip that warning. It is also ample
-/// here: the shortfall that started this was 0.2%, per-block movement is about
-/// 1%, and the drift measured across several minutes was under 15% — which
-/// matters because this app deliberately puts a confirmation dialog in front of
-/// every action, so the base fee keeps moving while it is read.
-const BASE_FEE_HEADROOM = 2n;
+/// Measured over 513 consecutive blocks (about 100 seconds, since blocks here
+/// are 0.2s): the base fee moved between 10,000,000 and 11,993,000 — a 20%
+/// spread — with the largest single-block rise at 1.1%. But it rose at all on
+/// 320 of those 512 boundaries, so a cap quoting the base fee exactly, which is
+/// what the wallet does here, loses about three coin tosses in five.
+///
+/// 2x covers that 20% spread four times over, and is what ethers v6 has used as
+/// its default for years (2 * baseFee + tip), so it is a thoroughly ordinary
+/// number rather than an extravagant one.
+///
+/// It is chosen this generously because of the failure mode on the other side:
+/// a cap the base fee outruns *before* submission is rejected cleanly and can
+/// be retried, but one it outruns *after* submission leaves the transaction
+/// sitting in the pool, which the user can only resolve by speeding it up in
+/// their wallet. Being a little too high costs nothing; being a little too low
+/// costs someone a stuck transaction.
+///
+/// No multiplier survives sustained congestion here. EIP-1559 lets the base fee
+/// climb 12.5% per full block, and at 0.2s blocks that is 350x in ten seconds —
+/// far beyond anything worth pre-paying for. That case is handled by the error
+/// message and a retry, not by a bigger number.
+const BASE_FEE_HEADROOM_PERCENT = 200n;
 
 export type FeeOverrides = {
   maxFeePerGas?: bigint;
@@ -53,7 +69,7 @@ export async function feeOverrides(client?: PublicClient): Promise<FeeOverrides>
 
     return {
       maxPriorityFeePerGas: priority,
-      maxFeePerGas: block.baseFeePerGas * BASE_FEE_HEADROOM + priority,
+      maxFeePerGas: (block.baseFeePerGas * BASE_FEE_HEADROOM_PERCENT) / 100n + priority,
     };
   } catch {
     return {};
