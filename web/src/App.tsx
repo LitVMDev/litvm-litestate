@@ -43,7 +43,7 @@ function readLastEstate(wallet?: string): `0x${string}` | undefined {
 }
 
 export default function App() {
-  const [route, navigate] = useRoute();
+  const [route, navigate, section] = useRoute();
   const { isConnected } = useAccount();
 
   // Landing exists to explain the thing; once a wallet is connected there is
@@ -53,6 +53,20 @@ export default function App() {
     // Only react to the connection flipping, not to later navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected]);
+
+  // The browser will not do this for us: it only auto-scrolls when the fragment
+  // is a bare element id, and ours names the page too. Without it, changing
+  // page keeps the previous page's scroll offset — which is what "How it works
+  // opens part way down" was.
+  useEffect(() => {
+    const target = section ? document.getElementById(section) : null;
+
+    if (target) {
+      target.scrollIntoView();
+    } else {
+      window.scrollTo({ top: 0 });
+    }
+  }, [route, section]);
 
   return (
     <>

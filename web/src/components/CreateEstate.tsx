@@ -4,7 +4,7 @@ import { FACTORY_ADDRESS, isFactoryConfigured } from "../wagmi";
 import { APPROVAL_RULE_LABEL, ApprovalRule, DistributionMode, MAX_APPROVERS } from "../lib/estate";
 import { useLimits } from "../lib/useLimits";
 import { useTx } from "../lib/useTx";
-import { href } from "../lib/useRoute";
+import { sectionHref } from "../lib/useRoute";
 import { Field, Notice, Panel, TxStatus } from "./Common";
 import { Confirm } from "./Confirm";
 
@@ -150,7 +150,7 @@ export function CreateEstate({ onCreated }: { onCreated: () => void }) {
           <>
             Whether your beneficiaries can claim straight away, or whether people
             you trust must confirm first.{" "}
-            <a href={`${href.how}#approval`}>Read more about approval rules</a>.
+            <a href={sectionHref("how", "approval")}>Read more about approval rules</a>.
           </>
         }
       >

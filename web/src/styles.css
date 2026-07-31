@@ -630,3 +630,7 @@ body { overflow-x: hidden; }
 /* The "it is not a secret" caveat under the shareable address. Quieter than
    the instruction above it, but not hidden — it changes who you name. */
 .share .share-note { color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+/* Headings linked from the table of contents. The site header is sticky, so a
+   heading scrolled exactly to the top lands underneath it. */
+.prose [id] { scroll-margin-top: 72px; }

@@ -1,4 +1,4 @@
-import { href } from "../lib/useRoute";
+import { href, sectionHref } from "../lib/useRoute";
 
 export function HowItWorks() {
   return (
@@ -13,18 +13,18 @@ export function HowItWorks() {
 
       <div className="toc">
         <ul>
-          <li><a href="#idea">The basic idea</a></li>
-          <li><a href="#roles">Who is involved</a></li>
-          <li><a href="#lifecycle">The lifecycle</a></li>
-          <li><a href="#checkin">Checking in</a></li>
-          <li><a href="#shares">Shares and the remainder</a></li>
-          <li><a href="#approval">Approval rules</a></li>
-          <li><a href="#funding">Funding and withdrawing</a></li>
-          <li><a href="#claiming">Claiming</a></li>
-          <li><a href="#locks">What locks, and when</a></li>
-          <li><a href="#privacy">What anyone can see</a></li>
-          <li><a href="#wrong">How this can go wrong</a></li>
-          <li><a href="#money">What the money actually is</a></li>
+          <li><a href={sectionHref("how", "idea")}>The basic idea</a></li>
+          <li><a href={sectionHref("how", "roles")}>Who is involved</a></li>
+          <li><a href={sectionHref("how", "lifecycle")}>The lifecycle</a></li>
+          <li><a href={sectionHref("how", "checkin")}>Checking in</a></li>
+          <li><a href={sectionHref("how", "shares")}>Shares and the remainder</a></li>
+          <li><a href={sectionHref("how", "approval")}>Approval rules</a></li>
+          <li><a href={sectionHref("how", "funding")}>Funding and withdrawing</a></li>
+          <li><a href={sectionHref("how", "claiming")}>Claiming</a></li>
+          <li><a href={sectionHref("how", "locks")}>What locks, and when</a></li>
+          <li><a href={sectionHref("how", "privacy")}>What anyone can see</a></li>
+          <li><a href={sectionHref("how", "wrong")}>How this can go wrong</a></li>
+          <li><a href={sectionHref("how", "money")}>What the money actually is</a></li>
         </ul>
       </div>
 
@@ -219,7 +219,7 @@ export function HowItWorks() {
         You also set an <strong>approval window</strong>: how long approvers
         have to act once the grace period ends. If the window closes without
         enough approvals, the estate is stuck — see{" "}
-        <a href="#wrong">how this can go wrong</a>.
+        <a href={sectionHref("how", "wrong")}>how this can go wrong</a>.
       </p>
 
       <h3 id="funding">Funding and withdrawing</h3>
